@@ -1,0 +1,47 @@
+.container {
+  margin: 20px;
+  font-family: Arial, sans-serif;
+}
+
+.text-center {
+  text-align: center;
+}
+
+.markdown-input {
+  width: 100%;
+  padding: 10px;
+  margin: 20px 0;
+  font-size: 16px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+}
+
+.markdown-output {
+  padding: 20px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  background-color: #f9f9f9;
+}
+
+h1,
+h2,
+h3 {
+  color: #333;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+table,
+th,
+td {
+  border: 1px solid #ddd;
+  padding: 8px;
+}
+
+th {
+  background-color: #f4f4f4;
+  text-align: center;
+}

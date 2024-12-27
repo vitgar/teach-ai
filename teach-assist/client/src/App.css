@@ -1,0 +1,112 @@
+/* customStyles.css */
+
+/* Color Palette */
+:root {
+  --primary-color: #00abe4;
+  --secondary-color: #e9f1fa;
+  --accent-color: #edf756;
+  --danger-color: #;
+  --neutral-color: #000000;
+}
+
+/* General Styles */
+body {
+  background-color: var(--secondary-color);
+  color: var(--neutral-color);
+}
+
+.wrapper {
+  display: flex;
+  width: 100%;
+}
+
+/* Sidebar Styles */
+#sidebar {
+  min-width: 15%;
+  max-width: 15%;
+  max-height: max-content;
+  background-color: var(--primary-color);
+  color: var(--neutral-color);
+  transition: all 0.3s;
+}
+
+#sidebar.active {
+  margin-left: -250px;
+}
+
+#sidebar .list-group-item {
+  background-color: var(--primary-color);
+  color: var(--neutral-color);
+  border: none;
+}
+
+#sidebar .list-group-item.active {
+  background-color: var(--accent-color);
+  color: var(--primary-color);
+}
+
+#sidebar .list-group-item:hover {
+  background-color: var(--secondary-color);
+}
+
+/* Content Area Styles */
+#content {
+  width: 100%;
+  padding: 20px;
+}
+
+/* Table Styles */
+.table thead {
+  background-color: var(--primary-color);
+  color: white;
+}
+
+.table tbody tr {
+  background-color: white;
+  color: var(--neutral-color);
+}
+
+.table tbody tr:hover {
+  background-color: var(--secondary-color);
+}
+
+/* Buttons */
+.btn-primary {
+  background-color: var(--accent-color);
+  border-color: var(--accent-color);
+  color: var(--primary-color);
+}
+
+.btn-primary:hover {
+  background-color: var(--danger-color);
+  border-color: var(--danger-color);
+  color: white;
+}
+
+/* Form Controls */
+.form-control {
+  background-color: var(--accent-color);
+  border: 1px solid var(--accent-color);
+  color: var(--accent-color);
+}
+
+.form-control:focus {
+  background-color: white;
+  border-color: var(--primary-color);
+  color: var(--neutral-color);
+}
+
+/* Additional Styles for Sidebar and Main Content */
+.app-container {
+  display: flex;
+}
+
+.sidebar {
+  width: 250px;
+  /* Add other styles to make the sidebar visible */
+}
+
+.main-content {
+  flex-grow: 1;
+  /* Add other styles for main content */
+}

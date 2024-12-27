@@ -1,0 +1,57 @@
+.markdown-body {
+  font-family: Arial, sans-serif;
+  line-height: 1.6;
+  padding: 20px;
+}
+
+/* Common heading style for all section titles */
+.passage-title,
+.questions-title,
+.answer-key-title {
+  text-align: center;
+  font-weight: bold;
+  font-size: 1.2em;
+  margin: 1.5em 0;
+  color: #000;
+}
+
+/* Remove previous individual heading styles */
+.passage-title {
+  margin-top: 0; /* First heading doesn't need top margin */
+}
+
+.questions-title {
+  margin-top: 2em; /* Keep extra space before questions section */
+}
+
+.answer-key-title {
+  margin-top: 2em; /* Keep extra space before answer key section */
+}
+
+.passage-content {
+  margin-bottom: 2em;
+}
+
+.passage-content p {
+  margin-bottom: 1em;
+}
+
+.question {
+  margin-bottom: 2em;
+}
+
+.question-text {
+  margin-bottom: 0.8em;
+}
+
+.answer-choices {
+  margin-left: 2em;
+}
+
+.answer-choice {
+  display: block;
+  margin-bottom: 0.5em;
+  line-height: 1.4;
+}
+
+/* Print styles remain the same */

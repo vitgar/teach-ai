@@ -1,0 +1,101 @@
+/* Base styles */
+.worksheet-container {
+  font-family: Arial, sans-serif;
+  line-height: 1.6;
+  padding: 20px;
+}
+
+/* Headers */
+.worksheet-container h1 {
+  font-size: 24px;
+  font-weight: bold;
+  margin-bottom: 20px;
+  text-align: center;
+}
+
+.worksheet-container h2 {
+  font-size: 20px;
+  font-weight: bold;
+  margin-top: 24px;
+  margin-bottom: 16px;
+}
+
+.worksheet-container h3 {
+  font-size: 18px;
+  font-weight: bold;
+  margin-top: 20px;
+  margin-bottom: 12px;
+}
+
+/* Multiple Choice Questions */
+.question {
+  margin-bottom: 24px;
+}
+
+.question-text {
+  font-weight: normal;
+  margin-bottom: 12px;
+  display: block;
+}
+
+.answer-choices {
+  margin-left: 24px;
+}
+
+.answer-choice {
+  display: block;
+  margin-bottom: 8px;
+}
+
+/* Lists */
+.worksheet-container ul,
+.worksheet-container ol {
+  margin-bottom: 16px;
+  padding-left: 24px;
+}
+
+.worksheet-container li {
+  margin-bottom: 8px;
+}
+
+/* Tables */
+.worksheet-container table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 20px;
+}
+
+.worksheet-container th,
+.worksheet-container td {
+  border: 1px solid #ddd;
+  padding: 8px;
+  text-align: left;
+}
+
+.worksheet-container th {
+  background-color: #f5f5f5;
+  font-weight: bold;
+}
+
+/* Print specific styles */
+@media print {
+  .worksheet-container {
+    padding: 20px;
+  }
+
+  .answer-key {
+    page-break-before: always;
+  }
+
+  .question {
+    page-break-inside: avoid;
+  }
+
+  .question-text {
+    margin-bottom: 12px;
+  }
+
+  .answer-choice {
+    margin-bottom: 8px;
+  }
+} 

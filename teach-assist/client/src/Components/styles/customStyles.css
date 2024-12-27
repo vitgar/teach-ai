@@ -1,0 +1,212 @@
+/* Floating Action Button (FAB) Styles */
+.fab {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  background-color: var(--accent-color);
+  border: none;
+  border-radius: 50%;
+  width: 60px;
+  height: 60px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+  transition: background-color 0.3s;
+}
+
+.fab:hover {
+  background-color: var(--danger-color);
+}
+
+.fab i {
+  font-size: 24px;
+  color: white;
+}
+
+/* Color Palette */
+:root {
+  --primary-color: #2364aa;
+  --secondary-color: #3da5d9;
+  --accent-color: #73bfb8;
+  --highlight-color: #fec601;
+  --contrast-color: #ea7317;
+  --white: #ffffff;
+  --light-gray: #f5f5f5;
+}
+
+body {
+  background-color: var(--light-gray);
+  color: var(--primary-color);
+}
+
+.wrapper {
+  display: flex;
+  width: 100%;
+}
+
+/* Sidebar Styles */
+#sidebar {
+  background-color: var(--primary-color);
+  color: var(--white);
+}
+
+#sidebar .sidebar-header {
+  background-color: var(--primary-color);
+}
+
+#sidebar .sidebar-title {
+  color: #2364aa;
+  font-weight: bold;
+}
+
+#sidebar .list-group-item {
+  background-color: var(--primary-color);
+  color: var(--white);
+  border: none;
+  transition: background-color 0.3s, color 0.3s;
+}
+
+#sidebar .list-group-item:hover {
+  background-color: var(--secondary-color);
+}
+
+#sidebar .list-group-item.active {
+  background-color: var(--accent-color);
+  color: var(--primary-color);
+}
+
+/* Sidebar Link Styles */
+#sidebar .list-group-item .text-white {
+  text-decoration: none; /* Removes the underline from links */
+}
+
+#sidebar .list-group-item .text-white:hover {
+  text-decoration: none; /* Ensures no underline on hover */
+  color: var(--primary-sidebar-color); /* Optional: change color on hover */
+}
+
+#sidebar .list-group-item.active .text-white {
+  text-decoration: none; /* Ensures no underline on active links */
+}
+
+/* Content Area Styles */
+#content {
+  background-color: var(--white);
+  padding: 20px;
+}
+
+/* Table Styles */
+.table thead {
+  background-color: var(--contrast-color); 
+  color: var(--accent-color);
+}
+
+.table tbody tr:nth-child(even) {
+  background-color: var(--light-gray);
+}
+
+.table tbody tr:hover {
+  background-color: var(--secondary-color);
+}
+
+/* Intervention Students cells */
+.form-control {
+  background-color: var(--white);
+  border: 1px solid var(--primary-color);
+}
+
+.form-control:focus {
+  background-color: white;
+  border-color: var(--primary-sidebar-color);
+  color: var(--neutral-color);
+}
+
+/* Intervention Tables */
+.hover-highlight {
+  cursor: pointer;
+  transition: background-color 0.3s ease;
+}
+
+.hover-highlight:hover td {
+  background-color: #f0f0f0;
+}
+
+/* Floating Button */
+
+.fab {
+  background-color: #007bff; /* Blue color */
+  border: none;
+  border-radius: 12px; /* Curved corners */
+  padding: 10px 20px;
+  color: white;
+  font-size: 16px;
+  cursor: pointer;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+  transition: background-color 0.3s ease;
+}
+
+.fab:hover {
+  background-color: #0056b3; /* Darker blue on hover */
+}
+
+/* Buttons */
+.button-container {
+  display: flex;
+  justify-content: flex-start; /* Align buttons to the left */
+  gap: 10px; /* Add space between buttons */
+  margin-top: 20px; /* Add space above the buttons */
+}
+
+.btn-primary {
+  background-color: #007bff;
+  border: none;
+  padding: 10px 20px;
+  border-radius: 5px;
+  color: white;
+  cursor: pointer;
+  font-size: 16px;
+}
+
+.btn-secondary {
+  background-color: #6c757d;
+  border: none;
+  padding: 10px 20px;
+  border-radius: 5px;
+  color: white;
+  cursor: pointer;
+  font-size: 16px;
+}
+
+/* Custom classes for the new color scheme */
+.bg-primary {
+  background-color: var(--primary-color) !important;
+}
+.bg-secondary {
+  background-color: var(--secondary-color) !important;
+}
+.bg-accent {
+  background-color: var(--accent-color) !important;
+}
+.bg-highlight {
+  background-color: var(--highlight-color) !important;
+}
+.bg-contrast {
+  background-color: var(--contrast-color) !important;
+}
+
+.text-primary {
+  color: var(--primary-color) !important;
+}
+.text-secondary {
+  color: var(--secondary-color) !important;
+}
+.text-accent {
+  color: var(--accent-color) !important;
+}
+.text-highlight {
+  color: var(--highlight-color) !important;
+}
+.text-contrast {
+  color: var(--contrast-color) !important;
+}
