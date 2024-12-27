@@ -1,0 +1,24 @@
+{
+  "compilerOptions": {
+    "target": "ES6", // Specify ECMAScript target version
+    "lib": ["dom", "dom.iterable", "esnext"], // Libraries to use
+    "allowJs": true, // Allow JavaScript files
+    "skipLibCheck": true, // Skip type checks for node_modules
+    "esModuleInterop": true, // Support import/export of ES6 modules
+    "allowSyntheticDefaultImports": true, // Allows default imports for modules with no default export
+    "strict": true, // Enable strict type checking
+    "forceConsistentCasingInFileNames": true, // Enforce case-sensitive file names
+    "noEmit": true, // No output from tsc
+    "jsx": "react", // Enable JSX support (change to "react-jsx" for React 17+)
+    "moduleResolution": "node", // Resolve modules according to Node.js resolution
+    "isolatedModules": true, // Treat each file as a separate module
+    "resolveJsonModule": true, // Allow importing JSON files
+    "module": "esnext", // Module code generation
+    "baseUrl": ".", // Base directory for imports
+    "paths": {
+      "@/*": ["src/*"] // Optional: Allows importing modules using `@/` as shorthand for `src/`
+    }
+  },
+  "include": ["src", "src/types", "src/utils"], // Specify which folders to include
+  "exclude": ["node_modules", "dist"] // Exclude unnecessary folders
+}

@@ -1,0 +1,49 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Start Development Environment",
+      "dependsOn": [
+        "Start Client",
+        "Start DB Backend",
+        "Start AI Backend"
+      ],
+      "runOptions": {
+        "runOn": "folderOpen"
+      }
+    },
+    {
+      "label": "Start Client",
+      "type": "shell",
+      "command": "cd client && npm start",
+      "presentation": {
+        "reveal": "always",
+        "panel": "new",
+        "group": "develop"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Start DB Backend",
+      "type": "shell",
+      "command": "cd db-backend && node server.js",
+      "presentation": {
+        "reveal": "always",
+        "panel": "new",
+        "group": "develop"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Start AI Backend",
+      "type": "shell",
+      "command": "cd ai-backend && python app.py",
+      "presentation": {
+        "reveal": "always",
+        "panel": "new",
+        "group": "develop"
+      },
+      "problemMatcher": []
+    }
+  ]
+} 
