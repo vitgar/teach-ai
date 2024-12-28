@@ -6,18 +6,18 @@
       "use": "@vercel/node"
     }
   ],
-  "routes": [
+  "rewrites": [
     {
-      "src": "/api/(.*)",
-      "dest": "api/v1/handler.js"
+      "source": "/api/(.*)",
+      "destination": "/api/v1/handler.js"
     },
     {
-      "src": "/auth/(.*)",
-      "dest": "api/v1/handler.js"
+      "source": "/auth/(.*)",
+      "destination": "/api/v1/handler.js"
     },
     {
-      "src": "/(.*)",
-      "dest": "api/v1/handler.js"
+      "source": "/(.*)",
+      "destination": "/api/v1/handler.js"
     }
   ],
   "headers": [
