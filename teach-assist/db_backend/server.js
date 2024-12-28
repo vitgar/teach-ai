@@ -88,16 +88,33 @@ protectedRoutes.forEach(({ path, router }) => {
 });
 
 // MongoDB connection
-mongoose.connect("mongodb://localhost:27017/teacherDB", {
+const mongoURI = process.env.NODE_ENV === 'production' 
+  ? process.env.MONGODB_PROD_URI 
+  : process.env.MONGODB_DEV_URI;
+
+console.log(`Connecting to MongoDB in ${process.env.NODE_ENV || 'development'} mode`);
+
+const mongooseOptions = {
   useNewUrlParser: true,
   useUnifiedTopology: true,
-});
+  serverApi: process.env.NODE_ENV === 'production' ? { 
+    version: '1',
+    strict: true,
+    deprecationErrors: true 
+  } : undefined
+};
+
+mongoose.connect(mongoURI, mongooseOptions);
 mongoose.set("strictQuery", false);
 
 // Connection Confirmation
 const connection = mongoose.connection;
 connection.once("open", () => {
-  console.log("MongoDB database connection established successfully");
+  console.log(`MongoDB database connection established successfully on ${process.env.NODE_ENV || 'development'}`);
+});
+
+connection.on("error", (err) => {
+  console.error("MongoDB connection error:", err);
 });
 
 // Remove or comment out the static file serving if not needed
