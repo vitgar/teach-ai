@@ -19,6 +19,11 @@
 .env.test.local
 .env.production.local
 
+# Ignore all .env files in specific directories
+ai_backend/.env
+db_backend/.env
+subscription_backend/.env
+
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
