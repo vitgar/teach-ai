@@ -60,6 +60,49 @@ app.use(session({
 app.use(passport.initialize());
 app.use(passport.session());
 
+// Default routes for API information
+const apiInfo = {
+  name: 'TeachAssist API',
+  version: '1.0.0',
+  environment: process.env.NODE_ENV || 'development',
+  status: 'healthy',
+  timestamp: new Date().toISOString(),
+  endpoints: {
+    auth: '/auth',
+    standards: '/api/standards',
+    lessonPlans: '/api/lesson-plans',
+    interventions: '/api/interventions',
+    teachers: '/api/teachers',
+    students: '/api/students',
+    periods: '/api/periods',
+    groups: '/api/groups',
+    groupTypes: '/api/group-types',
+    guidedReading: '/api/guided-reading',
+    nextSteps: '/api/next-steps',
+    smallGroupLessonPlans: '/api/small-group-lesson-plans',
+    studentObservations: '/api/student-observations',
+    passages: '/api/passages',
+    detailedStandards: '/api/detailedstandards',
+    feedback: '/api/feedback'
+  }
+};
+
+// Root route
+app.get('/', (req, res) => {
+  res.json({
+    ...apiInfo,
+    timestamp: new Date().toISOString()
+  });
+});
+
+// API root route
+app.get('/api', (req, res) => {
+  res.json({
+    ...apiInfo,
+    timestamp: new Date().toISOString()
+  });
+});
+
 // Public Routes (no authentication required)
 app.use("/auth", authRoutes);
 app.use('/api/standards', standardsRoutes);
