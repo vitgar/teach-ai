@@ -18,22 +18,22 @@ require("./models");
 console.log("Node Environment:", process.env.NODE_ENV);
 
 // Import Routes
-const authRoutes = require("./routes/auth");
-const lessonPlanRoutes = require("./routes/lessonPlans");
-const interventionRoutes = require("./routes/interventions");
-const teacherRoutes = require("./routes/teachers");
-const studentRoutes = require("./routes/students");
-const periodRoutes = require("./routes/periods");
-const groupRoutes = require("./routes/groups");
-const groupTypeRoutes = require("./routes/groupTypes");
-const guidedReadingRoutes = require("./routes/guidedReading");
-const nextStepsRoutes = require("./routes/nextSteps");
-// const openaiRoutes = require('./routes/generateWarmup');
-const smallGroupLessonPlanRoutes = require('./routes/smallGroupLessonPlans');
-const studentObservationsRoutes = require('./routes/studentObservations');
-const detailedStandardRoutes = require('./routes/detailedstandard');
-
-const Passage = require('./models/Passage');
+const authRoutes = require("./api/auth");
+const lessonPlanRoutes = require("./api/lessonPlans");
+const interventionRoutes = require("./api/interventions");
+const teacherRoutes = require("./api/teachers");
+const studentRoutes = require("./api/students");
+const periodRoutes = require("./api/periods");
+const groupRoutes = require("./api/groups");
+const groupTypeRoutes = require("./api/groupTypes");
+const guidedReadingRoutes = require("./api/guidedReading");
+const nextStepsRoutes = require("./api/nextSteps");
+const smallGroupLessonPlanRoutes = require('./api/smallGroupLessonPlans');
+const studentObservationsRoutes = require('./api/studentObservations');
+const detailedStandardRoutes = require('./api/detailedstandard');
+const standardsRoutes = require('./api/standards');
+const passagesRoutes = require('./api/passages');
+const feedbackRoutes = require('./api/feedback');
 
 const app = express();
 
@@ -61,8 +61,8 @@ app.use(passport.initialize());
 app.use(passport.session());
 
 // Public Routes (no authentication required)
-app.use("/auth", authRoutes); // Auth routes (login, signup, LinkedIn)
-app.use('/api/standards', require('./routes/standards')); // Public standards endpoint
+app.use("/auth", authRoutes);
+app.use('/api/standards', standardsRoutes);
 
 // Protected Routes (authentication required)
 const protectedRoutes = [
@@ -77,8 +77,9 @@ const protectedRoutes = [
   { path: "/api/next-steps", router: nextStepsRoutes },
   { path: '/api/small-group-lesson-plans', router: smallGroupLessonPlanRoutes },
   { path: '/api/student-observations', router: studentObservationsRoutes },
-  { path: '/api/passages', router: require('./routes/passages') },
-  { path: "/api/detailedstandards", router: detailedStandardRoutes }
+  { path: '/api/passages', router: passagesRoutes },
+  { path: "/api/detailedstandards", router: detailedStandardRoutes },
+  { path: '/api/feedback', router: feedbackRoutes }
 ];
 
 // Apply authentication middleware to protected routes
@@ -116,27 +117,6 @@ connection.once("open", () => {
 connection.on("error", (err) => {
   console.error("MongoDB connection error:", err);
 });
-
-// Remove or comment out the static file serving if not needed
-// app.use(express.static(path.join(__dirname, "client/build")));
-
-// Remove or comment out the catch-all route
-// app.get("*", (req, res) => {
-//   res.sendFile(path.join(__dirname, "client/build", "index.html"));
-// });
-
-// Routes
-app.use("/api/auth", authRoutes);
-app.use("/api/groups", groupRoutes);
-app.use("/api/group-types", groupTypeRoutes);
-app.use('/api/auth', require('./routes/auth'));
-app.use('/api/students', require('./routes/students'));
-app.use('/api/groups', require('./routes/groups'));
-app.use('/api/standards', require('./routes/standards'));
-app.use('/api/detailedstandards', require('./routes/detailedstandard'));
-app.use('/api/passages', require('./routes/passages'));
-app.use('/api/small-group-lesson-plans', require('./routes/lessonPlans'));
-app.use('/api/feedback', require('./routes/feedback'));
 
 // Start the server
 const port = process.env.PORT || 5000;
