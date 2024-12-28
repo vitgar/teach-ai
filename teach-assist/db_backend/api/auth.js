@@ -24,11 +24,11 @@ router.post('/signup', async (req, res) => {
       return res.status(400).json({ message: 'Email already registered' });
     }
 
-    // Hash password
+    // Hash password for security
     const salt = await bcrypt.genSalt(12);
     const hashedPassword = await bcrypt.hash(password, salt);
 
-    // Create new teacher with additional info
+    // Create new teacher with additional information
     const teacher = new Teacher({
       email,
       password: hashedPassword,
