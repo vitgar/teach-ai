@@ -8,15 +8,15 @@
   ],
   "rewrites": [
     {
-      "source": "/api/(.*)",
+      "source": "/api/:path*",
       "destination": "/api/v1/handler.js"
     },
     {
-      "source": "/auth/(.*)",
+      "source": "/auth/:path*",
       "destination": "/api/v1/handler.js"
     },
     {
-      "source": "/(.*)",
+      "source": "/:path*",
       "destination": "/api/v1/handler.js"
     }
   ],
