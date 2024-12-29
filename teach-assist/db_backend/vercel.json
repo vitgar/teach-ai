@@ -3,7 +3,11 @@
     "builds": [
       {
         "src": "api/v1/handler.js",
-        "use": "@vercel/node"
+        "use": "@vercel/node",
+        "config": {
+          "maxDuration": 10,
+          "memory": 1024
+        }
       }
     ],
     "rewrites": [
@@ -30,11 +34,5 @@
           { "key": "Access-Control-Allow-Headers", "value": "X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version, Authorization" }
         ]
       }
-    ],
-    "functions": {
-      "api/v1/handler.js": {
-        "memory": 1024,
-        "maxDuration": 10
-      }
-    }
+    ]
   } 
