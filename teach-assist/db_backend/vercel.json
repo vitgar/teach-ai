@@ -20,6 +20,9 @@
           "dest": "/api/v1/handler.js"
         }
     ],
+    "env": {
+      "MONGODB_URI": "@mongodb-uri"
+    },
     "headers": [
       {
         "source": "/(.*)",
