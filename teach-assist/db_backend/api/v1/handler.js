@@ -48,8 +48,6 @@ const connectToDatabase = async () => {
       serverSelectionTimeoutMS: 10000,
       socketTimeoutMS: 45000,
       connectTimeoutMS: 10000,
-      keepAlive: true,
-      keepAliveInitialDelay: 300000,
       maxPoolSize: 10,
       minPoolSize: 2,
       maxIdleTimeMS: 30000,
@@ -58,35 +56,45 @@ const connectToDatabase = async () => {
         version: '1',
         strict: true,
         deprecationErrors: true 
-      } : undefined
+      } : undefined,
+      // Modern connection settings
+      family: 4, // Use IPv4
+      heartbeatFrequencyMS: 10000,
+      retryWrites: true,
+      w: 'majority'
     };
 
-    // Create a new connection promise
-    connectionPromise = mongoose.connect(mongoURI, mongooseOptions)
-      .then(() => {
-        isConnected = true;
-        console.log('=> Connected to MongoDB successfully');
-        
-        // Create indexes only in development
-        if (process.env.NODE_ENV !== 'production') {
-          return Promise.all([
-            mongoose.model('Student').ensureIndexes(),
-            mongoose.model('Teacher').ensureIndexes(),
-            mongoose.model('Group').ensureIndexes(),
-            mongoose.model('NextStep').ensureIndexes(),
-            mongoose.model('Period').ensureIndexes(),
-            mongoose.model('GroupType').ensureIndexes()
-          ]).then(() => {
-            console.log('Indexes created successfully');
-          });
-        }
-      })
-      .catch((error) => {
-        isConnected = false;
-        connectionPromise = null;
-        console.error('MongoDB connection error:', error);
-        throw error;
-      });
+    // Create a new connection promise with timeout
+    connectionPromise = Promise.race([
+      mongoose.connect(mongoURI, mongooseOptions),
+      new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Initial connection timeout')), 10000)
+      )
+    ])
+    .then(() => {
+      isConnected = true;
+      console.log('=> Connected to MongoDB successfully');
+      
+      // Create indexes only in development
+      if (process.env.NODE_ENV !== 'production') {
+        return Promise.all([
+          mongoose.model('Student').ensureIndexes(),
+          mongoose.model('Teacher').ensureIndexes(),
+          mongoose.model('Group').ensureIndexes(),
+          mongoose.model('NextStep').ensureIndexes(),
+          mongoose.model('Period').ensureIndexes(),
+          mongoose.model('GroupType').ensureIndexes()
+        ]).then(() => {
+          console.log('Indexes created successfully');
+        });
+      }
+    })
+    .catch((error) => {
+      isConnected = false;
+      connectionPromise = null;
+      console.error('MongoDB connection error:', error);
+      throw error;
+    });
 
     return connectionPromise;
   } catch (error) {
@@ -126,21 +134,32 @@ setInterval(() => {
 }, 30000);
 
 module.exports = async (req, res) => {
+  let timeoutId;
+  
   try {
     // Don't process preflight requests
     if (req.method === 'OPTIONS') {
       return res.status(200).end();
     }
 
-    // Set a timeout for the entire request
-    const timeout = setTimeout(() => {
-      if (!res.headersSent) {
-        res.status(504).json({ 
-          error: 'Timeout',
-          message: 'Request took too long to process'
-        });
+    // Set up cleanup function
+    const cleanup = () => {
+      if (timeoutId) {
+        clearTimeout(timeoutId);
       }
-    }, 9000);
+    };
+
+    // Add response listeners
+    res.on('finish', cleanup);
+    res.on('close', cleanup);
+    res.on('error', cleanup);
+
+    // Set a timeout for the entire request
+    const requestTimeout = new Promise((_, reject) => {
+      timeoutId = setTimeout(() => {
+        reject(new Error('Request timeout'));
+      }, 9000);
+    });
 
     try {
       // Connect to database with timeout
@@ -167,19 +186,32 @@ module.exports = async (req, res) => {
         req.url = req.url.replace('/auth/', '/auth/');
       }
 
-      // Call the Express app with error handling
-      await new Promise((resolve, reject) => {
-        app(req, res, (err) => {
-          if (err) reject(err);
-          resolve();
-        });
-      });
+      // Call the Express app with error handling and timeout
+      await Promise.race([
+        new Promise((resolve, reject) => {
+          app(req, res, (err) => {
+            if (err) reject(err);
+            resolve();
+          });
+        }),
+        requestTimeout
+      ]);
 
-      // Clear the timeout if everything completed successfully
-      clearTimeout(timeout);
+      cleanup();
     } catch (error) {
-      clearTimeout(timeout);
+      cleanup();
       console.error('Express error:', error);
+      
+      if (error.message === 'Request timeout') {
+        if (!res.headersSent) {
+          res.status(504).json({ 
+            error: 'Gateway Timeout',
+            message: 'The request took too long to process'
+          });
+        }
+        return;
+      }
+
       if (!res.headersSent) {
         res.status(500).json({ 
           error: 'Internal Server Error',
@@ -188,6 +220,10 @@ module.exports = async (req, res) => {
       }
     }
   } catch (error) {
+    if (timeoutId) {
+      clearTimeout(timeoutId);
+    }
+    
     console.error('Handler error:', error);
     if (!res.headersSent) {
       res.status(500).json({ 
