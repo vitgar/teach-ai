@@ -10,44 +10,49 @@ process.on('uncaughtException', (err) => {
   console.error('Uncaught Exception:', err);
   if (err.code === 'ECONNRESET') {
     console.log('Connection reset by peer - ignoring');
-  } else {
-    process.exit(1);
+    // Don't exit process on ECONNRESET
+    return;
   }
+  // Exit on other uncaught exceptions
+  process.exit(1);
 });
 
 // Add error handler for unhandled rejections
 process.on('unhandledRejection', (reason, promise) => {
   console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+  // Don't exit process on unhandled rejections
 });
 
 const connectToDatabase = async () => {
-  // If we have an existing connection promise, return it
-  if (connectionPromise) {
-    return connectionPromise;
-  }
-
-  // If already connected, return immediately
-  if (isConnected && mongoose.connection.readyState === 1) {
-    return Promise.resolve();
-  }
-
   try {
+    // If we have an existing connection promise, return it
+    if (connectionPromise) {
+      return connectionPromise;
+    }
+
+    // If already connected, return immediately
+    if (isConnected && mongoose.connection.readyState === 1) {
+      return Promise.resolve();
+    }
+
     const mongoURI = process.env.NODE_ENV === 'production' 
       ? process.env.MONGODB_PROD_URI 
       : process.env.MONGODB_DEV_URI;
 
+    console.log('Attempting MongoDB connection...');
+
     const mongooseOptions = {
       useNewUrlParser: true,
       useUnifiedTopology: true,
-      serverSelectionTimeoutMS: 5000,
-      socketTimeoutMS: 45000, // Increased from 10000
+      serverSelectionTimeoutMS: 10000, // Increased timeout
+      socketTimeoutMS: 45000,
       connectTimeoutMS: 10000,
       keepAlive: true,
       keepAliveInitialDelay: 300000,
       maxPoolSize: 10,
       minPoolSize: 2,
       maxIdleTimeMS: 30000,
-      autoIndex: false, // Don't build indexes in production
+      autoIndex: false, // Disable auto-indexing
       serverApi: process.env.NODE_ENV === 'production' ? { 
         version: '1',
         strict: true,
@@ -59,7 +64,7 @@ const connectToDatabase = async () => {
     connectionPromise = mongoose.connect(mongoURI, mongooseOptions)
       .then(() => {
         isConnected = true;
-        console.log('=> Connected to MongoDB');
+        console.log('=> Connected to MongoDB successfully');
       })
       .catch((error) => {
         isConnected = false;

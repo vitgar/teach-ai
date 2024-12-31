@@ -97,6 +97,7 @@ console.log(`Connecting to MongoDB in ${process.env.NODE_ENV || 'development'} m
 const mongooseOptions = {
   useNewUrlParser: true,
   useUnifiedTopology: true,
+  autoIndex: process.env.NODE_ENV !== 'production', // Disable auto-indexing in production
   serverApi: process.env.NODE_ENV === 'production' ? { 
     version: '1',
     strict: true,
@@ -106,7 +107,20 @@ const mongooseOptions = {
 
 // Connect to MongoDB
 mongoose.connect(mongoURI, mongooseOptions)
-  .then(() => console.log('MongoDB connected'))
+  .then(() => {
+    console.log('MongoDB connected');
+    if (process.env.NODE_ENV !== 'production') {
+      // Only create indexes in development
+      return Promise.all([
+        mongoose.model('Student').ensureIndexes(),
+        mongoose.model('Teacher').ensureIndexes(),
+        mongoose.model('Group').ensureIndexes(),
+        mongoose.model('NextStep').ensureIndexes(),
+        mongoose.model('Period').ensureIndexes(),
+        mongoose.model('GroupType').ensureIndexes()
+      ]);
+    }
+  })
   .catch(err => console.error('MongoDB connection error:', err));
 
 mongoose.set("strictQuery", false);
