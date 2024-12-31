@@ -43,8 +43,8 @@ app.use(cors({
 app.use(bodyParser.json());
 app.use(cookieParser());
 
-// Session configuration
-app.use(session({
+// Only use session middleware for auth routes
+const sessionMiddleware = session({
   secret: process.env.SESSION_SECRET || 'your-secret-key',
   resave: false,
   saveUninitialized: false,
@@ -52,11 +52,31 @@ app.use(session({
     secure: process.env.NODE_ENV === 'production',
     maxAge: 24 * 60 * 60 * 1000 // 24 hours
   }
-}));
+});
 
-// Passport initialization
-app.use(passport.initialize());
-app.use(passport.session());
+// Add request timeout middleware
+app.use((req, res, next) => {
+  // Set a timeout for all requests
+  req.setTimeout(8000); // 8 seconds
+  res.setTimeout(8000);
+  
+  // Add a timeout handler
+  const timeout = setTimeout(() => {
+    if (!res.headersSent) {
+      res.status(504).json({
+        error: 'Timeout',
+        message: 'Request took too long to process'
+      });
+    }
+  }, 8000);
+  
+  // Clear timeout when response is sent
+  res.on('finish', () => clearTimeout(timeout));
+  next();
+});
+
+// Passport initialization (only for auth routes)
+app.use('/auth', [sessionMiddleware, passport.initialize(), passport.session()]);
 
 // MongoDB connection
 const mongoURI = process.env.NODE_ENV === 'production' 
