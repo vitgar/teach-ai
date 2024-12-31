@@ -29,10 +29,14 @@ const connectToDatabase = async () => {
       connectTimeoutMS: 10000,
       keepAlive: true,
       keepAliveInitialDelay: 300000,
-      poolSize: 10,
       maxPoolSize: 10,
       minPoolSize: 2,
-      maxIdleTimeMS: 30000
+      maxIdleTimeMS: 30000,
+      serverApi: process.env.NODE_ENV === 'production' ? { 
+        version: '1',
+        strict: true,
+        deprecationErrors: true 
+      } : undefined
     };
 
     // Create a new connection promise
