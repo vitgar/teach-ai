@@ -87,42 +87,6 @@ app.use((req, res, next) => {
 // Passport initialization (only for auth routes)
 app.use('/auth', [sessionMiddleware, passport.initialize(), passport.session()]);
 
-// MongoDB connection
-const mongoURI = process.env.NODE_ENV === 'production' 
-  ? process.env.MONGODB_PROD_URI 
-  : process.env.MONGODB_DEV_URI;
-
-console.log(`Connecting to MongoDB in ${process.env.NODE_ENV || 'development'} mode`);
-
-const mongooseOptions = {
-  useNewUrlParser: true,
-  useUnifiedTopology: true,
-  autoIndex: process.env.NODE_ENV !== 'production', // Disable auto-indexing in production
-  serverApi: process.env.NODE_ENV === 'production' ? { 
-    version: '1',
-    strict: true,
-    deprecationErrors: true 
-  } : undefined
-};
-
-// Connect to MongoDB
-mongoose.connect(mongoURI, mongooseOptions)
-  .then(() => {
-    console.log('MongoDB connected');
-    if (process.env.NODE_ENV !== 'production') {
-      // Only create indexes in development
-      return Promise.all([
-        mongoose.model('Student').ensureIndexes(),
-        mongoose.model('Teacher').ensureIndexes(),
-        mongoose.model('Group').ensureIndexes(),
-        mongoose.model('NextStep').ensureIndexes(),
-        mongoose.model('Period').ensureIndexes(),
-        mongoose.model('GroupType').ensureIndexes()
-      ]);
-    }
-  })
-  .catch(err => console.error('MongoDB connection error:', err));
-
 mongoose.set("strictQuery", false);
 
 // API Info

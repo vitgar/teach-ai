@@ -32,6 +32,7 @@ const connectToDatabase = async () => {
 
     // If already connected, return immediately
     if (isConnected && mongoose.connection.readyState === 1) {
+      console.log('Using existing MongoDB connection');
       return Promise.resolve();
     }
 
@@ -44,7 +45,7 @@ const connectToDatabase = async () => {
     const mongooseOptions = {
       useNewUrlParser: true,
       useUnifiedTopology: true,
-      serverSelectionTimeoutMS: 10000, // Increased timeout
+      serverSelectionTimeoutMS: 10000,
       socketTimeoutMS: 45000,
       connectTimeoutMS: 10000,
       keepAlive: true,
@@ -52,7 +53,7 @@ const connectToDatabase = async () => {
       maxPoolSize: 10,
       minPoolSize: 2,
       maxIdleTimeMS: 30000,
-      autoIndex: false, // Disable auto-indexing
+      autoIndex: false,
       serverApi: process.env.NODE_ENV === 'production' ? { 
         version: '1',
         strict: true,
@@ -65,6 +66,20 @@ const connectToDatabase = async () => {
       .then(() => {
         isConnected = true;
         console.log('=> Connected to MongoDB successfully');
+        
+        // Create indexes only in development
+        if (process.env.NODE_ENV !== 'production') {
+          return Promise.all([
+            mongoose.model('Student').ensureIndexes(),
+            mongoose.model('Teacher').ensureIndexes(),
+            mongoose.model('Group').ensureIndexes(),
+            mongoose.model('NextStep').ensureIndexes(),
+            mongoose.model('Period').ensureIndexes(),
+            mongoose.model('GroupType').ensureIndexes()
+          ]).then(() => {
+            console.log('Indexes created successfully');
+          });
+        }
       })
       .catch((error) => {
         isConnected = false;
@@ -84,7 +99,7 @@ const connectToDatabase = async () => {
 
 // Add connection event handlers
 mongoose.connection.on('connected', () => {
-  console.log('MongoDB connected');
+  console.log('MongoDB connection established');
   isConnected = true;
 });
 
@@ -108,7 +123,7 @@ setInterval(() => {
       console.error('Reconnection attempt failed:', err);
     });
   }
-}, 30000); // Try to reconnect every 30 seconds
+}, 30000);
 
 module.exports = async (req, res) => {
   try {
@@ -125,7 +140,7 @@ module.exports = async (req, res) => {
           message: 'Request took too long to process'
         });
       }
-    }, 9000); // 9 seconds timeout
+    }, 9000);
 
     try {
       // Connect to database with timeout
