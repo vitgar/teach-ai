@@ -13,6 +13,11 @@ process.on('uncaughtException', (err) => {
     // Don't exit process on ECONNRESET
     return;
   }
+  if (err.code === 'EPIPE') {
+    console.log('Broken pipe - ignoring');
+    // Don't exit process on EPIPE
+    return;
+  }
   // Exit on other uncaught exceptions
   process.exit(1);
 });
@@ -20,7 +25,7 @@ process.on('uncaughtException', (err) => {
 // Add error handler for unhandled rejections
 process.on('unhandledRejection', (reason, promise) => {
   console.error('Unhandled Rejection at:', promise, 'reason:', reason);
-  // Don't exit process on unhandled rejections
+  // Log but don't exit process on unhandled rejections
 });
 
 const connectToDatabase = async () => {
@@ -135,29 +140,34 @@ setInterval(() => {
 
 module.exports = async (req, res) => {
   let timeoutId;
+  let isRequestHandled = false;
   
   try {
-    // Don't process preflight requests
-    if (req.method === 'OPTIONS') {
-      return res.status(200).end();
-    }
-
     // Set up cleanup function
     const cleanup = () => {
       if (timeoutId) {
         clearTimeout(timeoutId);
       }
+      isRequestHandled = true;
     };
 
-    // Add response listeners
+    // Add response listeners early
     res.on('finish', cleanup);
     res.on('close', cleanup);
     res.on('error', cleanup);
 
+    // Don't process preflight requests
+    if (req.method === 'OPTIONS') {
+      cleanup();
+      return res.status(200).end();
+    }
+
     // Set a timeout for the entire request
     const requestTimeout = new Promise((_, reject) => {
       timeoutId = setTimeout(() => {
-        reject(new Error('Request timeout'));
+        if (!isRequestHandled) {
+          reject(new Error('Request timeout'));
+        }
       }, 9000);
     });
 
@@ -171,7 +181,7 @@ module.exports = async (req, res) => {
       ]);
 
       // Log incoming request for debugging
-      console.log('Incoming request:', {
+      console.log('Processing request:', {
         method: req.method,
         url: req.url,
         originalUrl: req.originalUrl,
@@ -189,47 +199,64 @@ module.exports = async (req, res) => {
       // Call the Express app with error handling and timeout
       await Promise.race([
         new Promise((resolve, reject) => {
-          app(req, res, (err) => {
-            if (err) reject(err);
-            resolve();
-          });
+          const next = (err) => {
+            if (err) {
+              reject(err);
+            } else {
+              resolve();
+            }
+          };
+
+          // Wrap the app call in try-catch
+          try {
+            app(req, res, next);
+          } catch (err) {
+            reject(err);
+          }
         }),
         requestTimeout
       ]);
 
-      cleanup();
+      // If we get here, the request was handled successfully
+      if (!isRequestHandled) {
+        cleanup();
+      }
     } catch (error) {
-      cleanup();
-      console.error('Express error:', error);
-      
-      if (error.message === 'Request timeout') {
+      if (!isRequestHandled) {
+        cleanup();
+        console.error('Express error:', error);
+        
+        if (error.message === 'Request timeout') {
+          if (!res.headersSent) {
+            res.status(504).json({ 
+              error: 'Gateway Timeout',
+              message: 'The request took too long to process'
+            });
+          }
+          return;
+        }
+
         if (!res.headersSent) {
-          res.status(504).json({ 
-            error: 'Gateway Timeout',
-            message: 'The request took too long to process'
+          res.status(500).json({ 
+            error: 'Internal Server Error',
+            message: error.message 
           });
         }
-        return;
       }
-
+    }
+  } catch (error) {
+    if (!isRequestHandled) {
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
+      
+      console.error('Handler error:', error);
       if (!res.headersSent) {
         res.status(500).json({ 
           error: 'Internal Server Error',
           message: error.message 
         });
       }
-    }
-  } catch (error) {
-    if (timeoutId) {
-      clearTimeout(timeoutId);
-    }
-    
-    console.error('Handler error:', error);
-    if (!res.headersSent) {
-      res.status(500).json({ 
-        error: 'Internal Server Error',
-        message: error.message 
-      });
     }
   }
 }; 
