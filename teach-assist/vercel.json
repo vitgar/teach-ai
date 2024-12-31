@@ -1,0 +1,29 @@
+{
+  "version": 2,
+  "builds": [
+    {
+      "src": "api/v1/**/*.js",
+      "use": "@vercel/node"
+    }
+  ],
+  "routes": [
+    {
+      "src": "/api/(.*)",
+      "dest": "/api/v1/handler.js"
+    },
+    {
+      "src": "/auth/(.*)",
+      "dest": "/api/v1/handler.js"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/api/v1/handler.js"
+    }
+  ],
+  "functions": {
+    "api/v1/**/*.js": {
+      "memory": 1024,
+      "maxDuration": 60
+    }
+  }
+} 
