@@ -156,7 +156,7 @@ const protectedRoutes = [
 // Apply authentication middleware to protected routes
 protectedRoutes.forEach(({ path, router }) => {
   console.log('Registering protected route:', path);
-  app.use(path, router);
+  app.use(path, isAuthenticated, router);
 });
 
 // Error handling middleware

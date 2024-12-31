@@ -241,10 +241,18 @@ module.exports = async (req, res) => {
 
       // Handle route mapping
       if (req.url.startsWith('/api/')) {
-        req.url = req.url.replace('/api/', '/');
+        // Keep the /api/ prefix for API routes
+        req.url = req.url;
       } else if (req.url.startsWith('/auth/')) {
-        req.url = req.url.replace('/auth/', '/auth/');
+        // Keep the /auth/ prefix for auth routes
+        req.url = req.url;
       }
+
+      // Log the final route for debugging
+      console.log('Final route:', {
+        originalUrl: req.originalUrl,
+        mappedUrl: req.url
+      });
 
       // Call the Express app with error handling and timeout
       await Promise.race([
