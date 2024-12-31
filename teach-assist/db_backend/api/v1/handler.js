@@ -8,24 +8,47 @@ let connectionPromise = null;
 // Add error handler for uncaught exceptions
 process.on('uncaughtException', (err) => {
   console.error('Uncaught Exception:', err);
-  if (err.code === 'ECONNRESET') {
-    console.log('Connection reset by peer - ignoring');
-    // Don't exit process on ECONNRESET
+  
+  // List of errors we want to handle gracefully
+  const ignoredErrors = ['ECONNRESET', 'EPIPE', 'ERR_STREAM_DESTROYED'];
+  
+  if (ignoredErrors.includes(err.code)) {
+    console.log(`${err.code} error - ignoring`);
     return;
   }
-  if (err.code === 'EPIPE') {
-    console.log('Broken pipe - ignoring');
-    // Don't exit process on EPIPE
-    return;
-  }
-  // Exit on other uncaught exceptions
-  process.exit(1);
+
+  // For other errors, log and exit gracefully
+  console.error('Fatal error - exiting process');
+  process.exitCode = 1;
+  
+  // Give time for cleanup before exit
+  setTimeout(() => {
+    process.exit(1);
+  }, 100);
 });
 
 // Add error handler for unhandled rejections
 process.on('unhandledRejection', (reason, promise) => {
   console.error('Unhandled Rejection at:', promise, 'reason:', reason);
   // Log but don't exit process on unhandled rejections
+});
+
+// Add graceful shutdown handler
+process.on('SIGTERM', () => {
+  console.log('SIGTERM received - cleaning up');
+  if (mongoose.connection.readyState === 1) {
+    mongoose.connection.close(false)
+      .then(() => {
+        console.log('MongoDB connection closed through app termination');
+        process.exit(0);
+      })
+      .catch(err => {
+        console.error('Error closing MongoDB connection:', err);
+        process.exit(1);
+      });
+  } else {
+    process.exit(0);
+  }
 });
 
 const connectToDatabase = async () => {
@@ -155,6 +178,21 @@ module.exports = async (req, res) => {
     res.on('finish', cleanup);
     res.on('close', cleanup);
     res.on('error', cleanup);
+
+    // Handle static files and non-API routes early
+    if (req.url.includes('.') || !req.url.startsWith('/api/')) {
+      if (req.url === '/favicon.ico' || req.url === '/favicon.png') {
+        cleanup();
+        return res.status(204).end();
+      }
+      
+      // For other static files or unknown routes
+      cleanup();
+      return res.status(404).json({
+        error: 'Not Found',
+        message: 'The requested resource was not found'
+      });
+    }
 
     // Don't process preflight requests
     if (req.method === 'OPTIONS') {
