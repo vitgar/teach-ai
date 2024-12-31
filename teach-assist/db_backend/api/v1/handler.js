@@ -3,10 +3,17 @@ const mongoose = require('mongoose');
 
 // Initialize MongoDB connection pool
 let isConnected = false;
+let connectionPromise = null;
+
 const connectToDatabase = async () => {
-  if (isConnected) {
-    console.log('=> Using existing database connection');
-    return;
+  // If we have an existing connection promise, return it
+  if (connectionPromise) {
+    return connectionPromise;
+  }
+
+  // If already connected, return immediately
+  if (isConnected && mongoose.connection.readyState === 1) {
+    return Promise.resolve();
   }
 
   try {
@@ -17,18 +24,56 @@ const connectToDatabase = async () => {
     const mongooseOptions = {
       useNewUrlParser: true,
       useUnifiedTopology: true,
-      serverSelectionTimeoutMS: 5000, // Timeout after 5s instead of 30s
-      socketTimeoutMS: 45000, // Close sockets after 45s of inactivity
+      serverSelectionTimeoutMS: 5000,
+      socketTimeoutMS: 10000,
+      connectTimeoutMS: 10000,
+      keepAlive: true,
+      keepAliveInitialDelay: 300000,
+      poolSize: 10,
+      maxPoolSize: 10,
+      minPoolSize: 2,
+      maxIdleTimeMS: 30000
     };
 
-    await mongoose.connect(mongoURI, mongooseOptions);
-    isConnected = true;
-    console.log('=> Connected to MongoDB');
+    // Create a new connection promise
+    connectionPromise = mongoose.connect(mongoURI, mongooseOptions)
+      .then(() => {
+        isConnected = true;
+        console.log('=> Connected to MongoDB');
+      })
+      .catch((error) => {
+        isConnected = false;
+        connectionPromise = null;
+        console.error('MongoDB connection error:', error);
+        throw error;
+      });
+
+    return connectionPromise;
   } catch (error) {
+    isConnected = false;
+    connectionPromise = null;
     console.error('MongoDB connection error:', error);
     throw error;
   }
 };
+
+// Add connection event handlers
+mongoose.connection.on('connected', () => {
+  console.log('MongoDB connected');
+  isConnected = true;
+});
+
+mongoose.connection.on('error', (err) => {
+  console.error('MongoDB connection error:', err);
+  isConnected = false;
+  connectionPromise = null;
+});
+
+mongoose.connection.on('disconnected', () => {
+  console.log('MongoDB disconnected');
+  isConnected = false;
+  connectionPromise = null;
+});
 
 module.exports = async (req, res) => {
   try {
@@ -37,50 +82,68 @@ module.exports = async (req, res) => {
       return res.status(200).end();
     }
 
-    // Connect to database
-    await connectToDatabase();
+    // Set a timeout for the entire request
+    const timeout = setTimeout(() => {
+      if (!res.headersSent) {
+        res.status(504).json({ 
+          error: 'Timeout',
+          message: 'Request took too long to process'
+        });
+      }
+    }, 9000); // 9 seconds timeout
 
-    // Log incoming request for debugging
-    console.log('Incoming request:', {
-      method: req.method,
-      url: req.url,
-      originalUrl: req.originalUrl,
-      path: req.path,
-      body: req.body
-    });
-
-    // Handle route mapping
-    if (req.url.startsWith('/api/')) {
-      req.url = req.url.replace('/api/', '/');
-    } else if (req.url.startsWith('/auth/')) {
-      req.url = req.url.replace('/auth/', '/auth/');
-    }
-
-    // Add error handling for the Express app
-    const handleError = (err) => {
-      console.error('Express error:', err);
-      res.status(500).json({ 
-        error: 'Internal Server Error',
-        message: err.message 
-      });
-    };
-
-    // Call the Express app with error handling
     try {
+      // Connect to database with timeout
+      await Promise.race([
+        connectToDatabase(),
+        new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Database connection timeout')), 5000)
+        )
+      ]);
+
+      // Log incoming request for debugging
+      console.log('Incoming request:', {
+        method: req.method,
+        url: req.url,
+        originalUrl: req.originalUrl,
+        path: req.path,
+        body: req.body
+      });
+
+      // Handle route mapping
+      if (req.url.startsWith('/api/')) {
+        req.url = req.url.replace('/api/', '/');
+      } else if (req.url.startsWith('/auth/')) {
+        req.url = req.url.replace('/auth/', '/auth/');
+      }
+
+      // Call the Express app with error handling
       await new Promise((resolve, reject) => {
         app(req, res, (err) => {
           if (err) reject(err);
           resolve();
         });
       });
+
+      // Clear the timeout if everything completed successfully
+      clearTimeout(timeout);
     } catch (error) {
-      handleError(error);
+      clearTimeout(timeout);
+      console.error('Express error:', error);
+      if (!res.headersSent) {
+        res.status(500).json({ 
+          error: 'Internal Server Error',
+          message: error.message 
+        });
+      }
     }
   } catch (error) {
     console.error('Handler error:', error);
-    return res.status(500).json({ 
-      error: 'Internal Server Error',
-      message: error.message 
-    });
+    if (!res.headersSent) {
+      res.status(500).json({ 
+        error: 'Internal Server Error',
+        message: error.message 
+      });
+    }
   }
 }; 
