@@ -179,8 +179,20 @@ module.exports = async (req, res) => {
     res.on('close', cleanup);
     res.on('error', cleanup);
 
-    // Handle static files and non-API routes early
-    if (req.url.includes('.') || !req.url.startsWith('/api/')) {
+    // Handle root route specially
+    if (req.url === '/' || req.url === '') {
+      cleanup();
+      return res.json({
+        name: 'TeachAssist API',
+        version: '1.0.0',
+        environment: process.env.NODE_ENV || 'development',
+        status: 'healthy',
+        timestamp: new Date().toISOString()
+      });
+    }
+
+    // Handle static files and non-API/non-root routes
+    if (req.url.includes('.') || (!req.url.startsWith('/api/') && !req.url.startsWith('/auth/'))) {
       if (req.url === '/favicon.ico' || req.url === '/favicon.png') {
         cleanup();
         return res.status(204).end();
