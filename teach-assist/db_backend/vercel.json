@@ -13,36 +13,38 @@
     "routes": [
       {
         "src": "/api/(.*)",
-        "methods": ["OPTIONS", "GET", "POST", "PUT", "PATCH", "DELETE"],
+        "dest": "/api/v1/handler.js",
+        "methods": ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
         "headers": {
-          "Access-Control-Allow-Credentials": "true",
           "Access-Control-Allow-Origin": "https://teach-ai-beige.vercel.app",
-          "Access-Control-Allow-Methods": "GET,OPTIONS,PATCH,DELETE,POST,PUT",
-          "Access-Control-Allow-Headers": "X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version, Authorization"
+          "Access-Control-Allow-Methods": "GET,POST,PUT,PATCH,DELETE,OPTIONS",
+          "Access-Control-Allow-Headers": "X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version, Authorization",
+          "Access-Control-Allow-Credentials": "true"
         },
-        "dest": "/api/v1/handler.js"
+        "continue": true
       },
       {
         "src": "/auth/(.*)",
-        "methods": ["OPTIONS", "GET", "POST", "PUT", "PATCH", "DELETE"],
+        "dest": "/api/v1/handler.js",
+        "methods": ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
         "headers": {
-          "Access-Control-Allow-Credentials": "true",
           "Access-Control-Allow-Origin": "https://teach-ai-beige.vercel.app",
-          "Access-Control-Allow-Methods": "GET,OPTIONS,PATCH,DELETE,POST,PUT",
-          "Access-Control-Allow-Headers": "X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version, Authorization"
+          "Access-Control-Allow-Methods": "GET,POST,PUT,PATCH,DELETE,OPTIONS",
+          "Access-Control-Allow-Headers": "X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version, Authorization",
+          "Access-Control-Allow-Credentials": "true"
         },
-        "dest": "/api/v1/handler.js"
+        "continue": true
       },
       {
         "src": "/(.*)",
-        "methods": ["OPTIONS", "GET", "POST", "PUT", "PATCH", "DELETE"],
+        "dest": "/api/v1/handler.js",
+        "methods": ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
         "headers": {
-          "Access-Control-Allow-Credentials": "true",
           "Access-Control-Allow-Origin": "https://teach-ai-beige.vercel.app",
-          "Access-Control-Allow-Methods": "GET,OPTIONS,PATCH,DELETE,POST,PUT",
-          "Access-Control-Allow-Headers": "X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version, Authorization"
-        },
-        "dest": "/api/v1/handler.js"
+          "Access-Control-Allow-Methods": "GET,POST,PUT,PATCH,DELETE,OPTIONS",
+          "Access-Control-Allow-Headers": "X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version, Authorization",
+          "Access-Control-Allow-Credentials": "true"
+        }
       }
     ]
   } 
