@@ -2,9 +2,16 @@
 
 import axios from "axios";
 
+const getBaseUrl = () => {
+  if (process.env.NODE_ENV === 'production') {
+    return 'https://teach-ai-db-backend.vercel.app';
+  }
+  return 'http://localhost:5000';
+};
+
 //API URL
 const apiAxiosInstance = axios.create({
-  baseURL: process.env.REACT_APP_AUTH_URL?.replace('/auth', '') || 'http://localhost:5000',
+  baseURL: getBaseUrl(),
   withCredentials: true
 });
 
