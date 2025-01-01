@@ -4,13 +4,13 @@ import axios from "axios";
 
 //API URL
 const apiAxiosInstance = axios.create({
-  baseURL: "http://localhost:5000",
+  baseURL: process.env.REACT_APP_AUTH_URL?.replace('/auth', '') || 'http://localhost:5000',
   withCredentials: true
 });
 
 //AI URL
 export const aiAxiosInstance = axios.create({
-  baseURL: "http://localhost:5001", // Adjust if different
+  baseURL: process.env.REACT_APP_AI_URL || "http://localhost:5001",
 });
 
 // Add a request interceptor

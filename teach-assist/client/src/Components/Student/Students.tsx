@@ -53,7 +53,7 @@ const Students = () => {
     e.preventDefault();
     try {
       const response = await apiAxiosInstance.post(
-        "http://localhost:5000/api/students",
+        "/api/students",
         formData
       );
       console.log("Student Info saved:", response.data);

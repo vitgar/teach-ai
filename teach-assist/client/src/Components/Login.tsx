@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
+import type { Location, NavigateFunction } from 'react-router-dom';
 import {
   Box,
   Button,
@@ -73,7 +74,7 @@ const Login: React.FC = () => {
 
   const handleLinkedInLogin = () => {
     sessionStorage.setItem('redirectPath', location.state?.from?.pathname || '/dashboard');
-    window.location.href = 'http://localhost:5000/auth/linkedin';
+    window.location.href = `${process.env.REACT_APP_AUTH_URL}/linkedin`;
   };
 
   useEffect(() => {
@@ -110,7 +111,7 @@ const Login: React.FC = () => {
 
   const handleGoogleLogin = () => {
     sessionStorage.setItem('redirectPath', location.state?.from?.pathname || '/dashboard');
-    window.location.href = 'http://localhost:5000/auth/google';
+    window.location.href = `${process.env.REACT_APP_AUTH_URL}/google`;
   };
 
   return (
