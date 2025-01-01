@@ -18,25 +18,37 @@ router.get('/', isAuthenticated, async (req, res) => {
       { $match: query },
       {
         $addFields: {
-          standardNum: { $arrayElemAt: [{ $split: ["$standard", "."] }, 1] },
-          standardGrade: {
-            $cond: {
-              if: { $eq: [{ $arrayElemAt: [{ $split: ["$standard", "."] }, 0] }, "K"] },
-              then: 0,  // Treat K as grade 0 for sorting
-              else: {
-                $convert: {
-                  input: { $arrayElemAt: [{ $split: ["$standard", "."] }, 0] },
-                  to: "int",
-                  onError: 0  // Default to 0 if conversion fails
-                }
-              }
+          standardStr: { $toString: "$standard" },
+          standardParts: {
+            $map: {
+              input: { $split: [{ $toString: "$standard" }, "."] },
+              as: "part",
+              in: "$$part"
             }
           }
         }
       },
       {
         $addFields: {
-          standardNumber: { 
+          standardGrade: {
+            $cond: {
+              if: { $eq: [{ $arrayElemAt: ["$standardParts", 0] }, "K"] },
+              then: 0,
+              else: {
+                $convert: {
+                  input: { $arrayElemAt: ["$standardParts", 0] },
+                  to: "int",
+                  onError: 0
+                }
+              }
+            }
+          },
+          standardNum: { $arrayElemAt: ["$standardParts", 1] }
+        }
+      },
+      {
+        $addFields: {
+          standardNumber: {
             $convert: {
               input: {
                 $reduce: {
@@ -57,7 +69,7 @@ router.get('/', isAuthenticated, async (req, res) => {
                 }
               },
               to: "int",
-              onError: 0  // Default to 0 if conversion fails
+              onError: 0
             }
           },
           standardLetter: {
