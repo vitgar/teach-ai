@@ -7,6 +7,7 @@ from dotenv import load_dotenv
 # Load environment variables from a .env file
 load_dotenv()
 
+# Initialize OpenAI client
 client = openai.OpenAI(
     api_key=os.environ.get("OPENAI_API_KEY"),
 )
@@ -31,7 +32,7 @@ The first header should be an h4 (####) followed by logically organized sections
 The inner headings should be h5 (#####) or h6 (######) to maintain a clear hierarchy.
 """
 
-def send_request_to_openai(prompt, model="gpt-4o-mini", max_tokens=4000):
+def send_request_to_openai(prompt, model="gpt-3.5-turbo", max_tokens=4000):
     try:
         response = client.chat.completions.create(
             model=model,
