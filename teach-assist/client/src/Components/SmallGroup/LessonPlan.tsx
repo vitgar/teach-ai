@@ -435,6 +435,7 @@ const LessonPlan = () => {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
+          prompt: topicToUse,
           topic: topicToUse,
           lexileLevel: lexileLevel
         })
