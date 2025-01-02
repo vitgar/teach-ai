@@ -38,14 +38,23 @@ const feedbackRoutes = require('./api/feedback');
 const app = express();
 
 // Global Middleware
+const allowedOrigins = process.env.NODE_ENV === 'production'
+  ? ['https://teach-ai-beige.vercel.app']
+  : ['http://localhost:3000'];
+
 app.use(cors({
-  origin: process.env.NODE_ENV === 'production' 
-    ? [
-        'https://teach-ai-beige.vercel.app',
-        /https:\/\/teach-[a-zA-Z0-9-]+-vitgars-projects\.vercel\.app$/  // Allow preview deployments
-      ]
-    : 'http://localhost:3000',
-  credentials: true
+  origin: function(origin, callback) {
+    // Allow requests with no origin (like mobile apps or curl requests)
+    if (!origin) return callback(null, true);
+    
+    if (allowedOrigins.indexOf(origin) === -1) {
+      return callback(new Error('CORS not allowed'), false);
+    }
+    return callback(null, true);
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['X-CSRF-Token', 'X-Requested-With', 'Accept', 'Accept-Version', 'Content-Length', 'Content-MD5', 'Content-Type', 'Date', 'X-Api-Version', 'Authorization']
 }));
 app.use(bodyParser.json());
 app.use(cookieParser());
