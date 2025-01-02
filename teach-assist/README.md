@@ -1,70 +1,73 @@
-# Getting Started with Create React App
+# TeachAssist Project Structure
 
-This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
+This project consists of three main components:
 
-## Available Scripts
+## 1. AI Backend (`ai_backend/`)
+- **Purpose**: Handles AI-related endpoints and OpenAI integration
+- **Tech Stack**: Python, FastAPI
+- **Development URL**: `http://localhost:5001`
+- **Production URL**: `https://teach-ai-aq9x.vercel.app`
+- **Environment Variables**:
+  - `OPENAI_API_KEY`: OpenAI API key
+  - `ENVIRONMENT`: 'development' or 'production'
 
-In the project directory, you can run:
+## 2. Database Backend (`db_backend/`)
+- **Purpose**: Handles database operations, authentication, and core API functionality
+- **Tech Stack**: Node.js, Express, MongoDB
+- **Development URL**: `http://localhost:5000`
+- **Production URL**: `https://teach-ai-db-backend.vercel.app`
+- **Environment Variables**:
+  - `MONGODB_DEV_URI`: Development MongoDB connection string
+  - `MONGODB_PROD_URI`: Production MongoDB connection string
+  - `JWT_SECRET`: Secret key for JWT tokens
+  - `SESSION_SECRET`: Secret key for sessions
+  - `NODE_ENV`: 'development' or 'production'
 
-### `npm start`
+## 3. Frontend (`client/`)
+- **Purpose**: React application for the user interface
+- **Tech Stack**: React, TypeScript, Material-UI
+- **Development URL**: `http://localhost:3000`
+- **Production URL**: `https://teach-ai-beige.vercel.app`
+- **Environment Variables**:
+  - `REACT_APP_API_URL`: DB Backend URL
+  - `REACT_APP_AUTH_URL`: Auth endpoint URL
+  - `REACT_APP_AI_URL`: AI Backend URL
 
-Runs the app in the development mode.\
-Open [http://localhost:3000](http://localhost:3000) to view it in your browser.
+## Development Setup
 
-The page will reload when you make changes.\
-You may also see any lint errors in the console.
+1. Clone the repository
+2. Set up environment variables in each component
+3. Install dependencies:
+   ```bash
+   # AI Backend
+   cd ai_backend
+   python -m venv venv
+   source venv/bin/activate  # or `venv\Scripts\activate` on Windows
+   pip install -r requirements.txt
 
-### `npm test`
+   # DB Backend
+   cd db_backend
+   npm install
 
-Launches the test runner in the interactive watch mode.\
-See the section about [running tests](https://facebook.github.io/create-react-app/docs/running-tests) for more information.
+   # Frontend
+   cd client
+   npm install
+   ```
+4. Start the development servers:
+   ```bash
+   # AI Backend
+   cd ai_backend
+   uvicorn main:app --reload --port 5001
 
-### `npm run build`
+   # DB Backend
+   cd db_backend
+   npm run dev
 
-Builds the app for production to the `build` folder.\
-It correctly bundles React in production mode and optimizes the build for the best performance.
+   # Frontend
+   cd client
+   npm start
+   ```
 
-The build is minified and the filenames include the hashes.\
-Your app is ready to be deployed!
+## Production Deployment
 
-See the section about [deployment](https://facebook.github.io/create-react-app/docs/deployment) for more information.
-
-### `npm run eject`
-
-**Note: this is a one-way operation. Once you `eject`, you can't go back!**
-
-If you aren't satisfied with the build tool and configuration choices, you can `eject` at any time. This command will remove the single build dependency from your project.
-
-Instead, it will copy all the configuration files and the transitive dependencies (webpack, Babel, ESLint, etc) right into your project so you have full control over them. All of the commands except `eject` will still work, but they will point to the copied scripts so you can tweak them. At this point you're on your own.
-
-You don't have to ever use `eject`. The curated feature set is suitable for small and middle deployments, and you shouldn't feel obligated to use this feature. However we understand that this tool wouldn't be useful if you couldn't customize it when you are ready for it.
-
-## Learn More
-
-You can learn more in the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).
-
-To learn React, check out the [React documentation](https://reactjs.org/).
-
-### Code Splitting
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/code-splitting](https://facebook.github.io/create-react-app/docs/code-splitting)
-
-### Analyzing the Bundle Size
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size](https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size)
-
-### Making a Progressive Web App
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app](https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app)
-
-### Advanced Configuration
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/advanced-configuration](https://facebook.github.io/create-react-app/docs/advanced-configuration)
-
-### Deployment
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/deployment](https://facebook.github.io/create-react-app/docs/deployment)
-
-### `npm run build` fails to minify
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify](https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify)
+All components are deployed on Vercel with their respective configurations in `vercel.json` files.
