@@ -20,5 +20,8 @@
         "Vary": "Origin"
       }
     }
-  ]
+  ],
+  "env": {
+    "ENVIRONMENT": "production"
+  }
 } 

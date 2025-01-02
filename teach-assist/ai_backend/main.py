@@ -28,8 +28,11 @@ app = FastAPI(
 def get_allowed_origins() -> List[str]:
     env = os.environ.get("ENVIRONMENT", "development")
     if env == "production":
-        return ["https://teach-ai-beige.vercel.app"]
-    return ["http://localhost:3000", "http://localhost:5001"]  # Development origins
+        return [
+            "https://teach-ai-beige.vercel.app",
+            "https://teach-ai-aq9x.vercel.app"
+        ]
+    return ["http://localhost:3000"]  # Development origin
 
 # Add CORS middleware
 app.add_middleware(
