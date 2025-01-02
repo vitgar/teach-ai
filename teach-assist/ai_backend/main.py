@@ -39,6 +39,12 @@ class ImproveInterventionRequest(BaseModel):
 class ImproveInterventionResponse(BaseModel):
     improved_text: str
 
+class GenerateStoryRequest(BaseModel):
+    prompt: str
+
+class GenerateStoryResponse(BaseModel):
+    story: str
+
 # Root endpoint
 @app.get("/")
 async def root():
@@ -52,7 +58,8 @@ async def root():
         "endpoints": {
             "root": "GET /",
             "health": "GET /health",
-            "improve_intervention": "POST /improve-intervention"
+            "improve_intervention": "POST /improve-intervention",
+            "generate_story": "POST /generate-story"
         }
     }
 
@@ -85,6 +92,22 @@ async def improve_intervention(request: ImproveInterventionRequest):
     except openai.error.OpenAIError as e:
         print(f"OpenAI API error: {e}")
         raise HTTPException(status_code=500, detail="Failed to improve intervention text.")
+
+    except Exception as e:
+        print(f"Unexpected error: {e}")
+        raise HTTPException(status_code=500, detail="An unexpected error occurred.")
+
+# Route to generate stories
+@app.post("/generate-story", response_model=GenerateStoryResponse)
+async def generate_story(request: GenerateStoryRequest):
+    """
+    Generate a story using OpenAI's GPT model.
+    """
+    try:
+        story = send_request_to_openai(request.prompt)
+        if story is None:
+            raise HTTPException(status_code=500, detail="Failed to generate story")
+        return GenerateStoryResponse(story=story)
 
     except Exception as e:
         print(f"Unexpected error: {e}")
