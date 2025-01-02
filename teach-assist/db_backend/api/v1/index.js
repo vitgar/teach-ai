@@ -37,12 +37,7 @@ const app = express();
 // Global Middleware
 app.use(cors({
   origin: process.env.NODE_ENV === 'production' 
-    ? [
-        'https://teach-assist.vercel.app', 
-        'https://teach-assist-git-main-vitgars.vercel.app',
-        'https://teach-ai-beige.vercel.app',
-        'https://teach-pnq91mlsa-vitgars-projects.vercel.app'
-      ] 
+    ? ['https://teach-assist.vercel.app', 'https://teach-assist-git-main-vitgars.vercel.app'] 
     : 'http://localhost:3000',
   credentials: true
 }));
