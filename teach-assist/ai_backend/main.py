@@ -7,6 +7,7 @@ from lesson_plan_generator import send_request_to_openai
 import openai
 import os
 from dotenv import load_dotenv
+from typing import List
 
 # Load environment variables from a .env file
 load_dotenv()
@@ -23,10 +24,17 @@ app = FastAPI(
     version="1.0.0"
 )
 
+# Get environment-specific origins
+def get_allowed_origins() -> List[str]:
+    env = os.environ.get("ENVIRONMENT", "development")
+    if env == "production":
+        return ["https://teach-ai-beige.vercel.app"]
+    return ["http://localhost:5001", "http://localhost:3000"]  # Development origins
+
 # Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["https://teach-ai-beige.vercel.app"],
+    allow_origins=get_allowed_origins(),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
