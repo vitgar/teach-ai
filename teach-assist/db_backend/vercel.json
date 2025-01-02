@@ -16,7 +16,7 @@
         "dest": "/api/v1/handler.js",
         "methods": ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
         "headers": {
-          "Access-Control-Allow-Origin": "https://teach-ai-beige.vercel.app",
+          "Access-Control-Allow-Origin": "*",
           "Access-Control-Allow-Methods": "GET,POST,PUT,PATCH,DELETE,OPTIONS",
           "Access-Control-Allow-Headers": "X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version, Authorization",
           "Access-Control-Allow-Credentials": "true"
@@ -28,7 +28,7 @@
         "dest": "/api/v1/handler.js",
         "methods": ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
         "headers": {
-          "Access-Control-Allow-Origin": "https://teach-ai-beige.vercel.app",
+          "Access-Control-Allow-Origin": "*",
           "Access-Control-Allow-Methods": "GET,POST,PUT,PATCH,DELETE,OPTIONS",
           "Access-Control-Allow-Headers": "X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version, Authorization",
           "Access-Control-Allow-Credentials": "true"
@@ -40,7 +40,7 @@
         "dest": "/api/v1/handler.js",
         "methods": ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
         "headers": {
-          "Access-Control-Allow-Origin": "https://teach-ai-beige.vercel.app",
+          "Access-Control-Allow-Origin": "*",
           "Access-Control-Allow-Methods": "GET,POST,PUT,PATCH,DELETE,OPTIONS",
           "Access-Control-Allow-Headers": "X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version, Authorization",
           "Access-Control-Allow-Credentials": "true"

@@ -40,7 +40,10 @@ const app = express();
 // Global Middleware
 app.use(cors({
   origin: process.env.NODE_ENV === 'production' 
-    ? ['https://teach-ai-beige.vercel.app'] 
+    ? [
+        'https://teach-ai-beige.vercel.app',
+        /https:\/\/teach-[a-zA-Z0-9-]+-vitgars-projects\.vercel\.app$/  // Allow preview deployments
+      ]
     : 'http://localhost:3000',
   credentials: true
 }));
