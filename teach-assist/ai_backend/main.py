@@ -29,7 +29,7 @@ def get_allowed_origins() -> List[str]:
     env = os.environ.get("ENVIRONMENT", "development")
     if env == "production":
         return ["https://teach-ai-beige.vercel.app"]
-    return ["http://localhost:5001", "http://localhost:3000"]  # Development origins
+    return ["http://localhost:3000"]  # Development origin
 
 # Add CORS middleware
 app.add_middleware(
@@ -38,6 +38,7 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    max_age=3600  # Cache preflight requests for 1 hour
 )
 
 # Pydantic models
