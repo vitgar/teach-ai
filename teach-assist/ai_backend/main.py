@@ -28,23 +28,16 @@ app = FastAPI(
 def get_allowed_origins() -> List[str]:
     env = os.environ.get("ENVIRONMENT", "development")
     if env == "production":
-        return [
-            "https://teach-ai-beige.vercel.app",    # Production frontend
-            "https://teach-assist.vercel.app"        # Alternative production domain
-        ]
-    return [
-        "http://localhost:5001",  # AI API development
-        "http://localhost:3000"   # Frontend development
-    ]
+        return ["https://teach-ai-beige.vercel.app"]
+    return ["http://localhost:5001", "http://localhost:3000"]  # Development origins
 
 # Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
     allow_origins=get_allowed_origins(),
     allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_methods=["*"],
     allow_headers=["*"],
-    max_age=3600  # Cache preflight requests for 1 hour
 )
 
 # Pydantic models
