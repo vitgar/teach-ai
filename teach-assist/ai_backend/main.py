@@ -228,11 +228,17 @@ async def chat(request: ChatRequest):
     Have a conversation with the AI teaching assistant.
     """
     try:
+        if not openai.api_key:
+            print("OpenAI API key is not set")
+            raise HTTPException(status_code=500, detail="OpenAI API key is not configured")
+
         system_prompt = """You are a helpful teaching assistant with expertise in education. 
         You provide clear, concise, and practical advice to teachers. 
         Focus on being specific and actionable in your responses."""
         
         context = f"\nContext: {request.context}" if request.context else ""
+        
+        print(f"Sending request to OpenAI API with message: {request.message[:100]}...")
         
         response = openai.ChatCompletion.create(
             model="gpt-3.5-turbo",
@@ -245,15 +251,24 @@ async def chat(request: ChatRequest):
         )
 
         chat_response = response.choices[0].message['content'].strip()
+        print(f"Received response from OpenAI API: {chat_response[:100]}...")
         return ChatResponse(response=chat_response)
 
+    except openai.error.AuthenticationError as e:
+        print(f"OpenAI Authentication error: {e}")
+        raise HTTPException(status_code=500, detail="Authentication failed with OpenAI API")
+    
+    except openai.error.RateLimitError as e:
+        print(f"OpenAI Rate limit error: {e}")
+        raise HTTPException(status_code=429, detail="Rate limit exceeded with OpenAI API")
+    
     except openai.error.OpenAIError as e:
         print(f"OpenAI API error: {e}")
-        raise HTTPException(status_code=500, detail="Failed to generate chat response.")
+        raise HTTPException(status_code=500, detail=f"OpenAI API error: {str(e)}")
     
     except Exception as e:
-        print(f"Unexpected error: {e}")
-        raise HTTPException(status_code=500, detail="An unexpected error occurred.")
+        print(f"Unexpected error in chat endpoint: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"An unexpected error occurred: {str(e)}")
 
 # Health check endpoint
 @app.get("/health")

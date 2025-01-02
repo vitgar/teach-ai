@@ -23,5 +23,6 @@
   ],
   "env": {
     "ENVIRONMENT": "production"
-  }
+  },
+  "buildCommand": "pip install -r requirements.txt"
 } 
