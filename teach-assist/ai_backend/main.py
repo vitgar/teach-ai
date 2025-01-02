@@ -17,7 +17,11 @@ if not openai.api_key:
     raise ValueError("OPENAI_API_KEY is not set in environment variables.")
 
 # Initialize FastAPI application
-app = FastAPI()
+app = FastAPI(
+    title="TeachAssist AI API",
+    description="AI-powered API for educational content generation and improvement",
+    version="1.0.0"
+)
 
 # Add CORS middleware
 app.add_middleware(
@@ -34,6 +38,23 @@ class ImproveInterventionRequest(BaseModel):
 
 class ImproveInterventionResponse(BaseModel):
     improved_text: str
+
+# Root endpoint
+@app.get("/")
+async def root():
+    """
+    Get basic information about the AI API.
+    """
+    return {
+        "name": "TeachAssist AI API",
+        "version": "1.0.0",
+        "status": "active",
+        "endpoints": {
+            "root": "GET /",
+            "health": "GET /health",
+            "improve_intervention": "POST /improve-intervention"
+        }
+    }
 
 # Route to improve intervention notes
 @app.post("/improve-intervention", response_model=ImproveInterventionResponse)
