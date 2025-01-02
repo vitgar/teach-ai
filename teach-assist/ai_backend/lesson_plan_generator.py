@@ -7,10 +7,8 @@ from dotenv import load_dotenv
 # Load environment variables from a .env file
 load_dotenv()
 
-# Initialize OpenAI client
-client = openai.OpenAI(
-    api_key=os.environ.get("OPENAI_API_KEY"),
-)
+# Set OpenAI API key
+openai.api_key = os.environ.get("OPENAI_API_KEY")
 
 system_message = """
 You are an experienced bilingual elementary school teacher with expertise in creating educational content. Your role is to:
@@ -34,7 +32,7 @@ The inner headings should be h5 (#####) or h6 (######) to maintain a clear hiera
 
 def send_request_to_openai(prompt, model="gpt-3.5-turbo", max_tokens=4000):
     try:
-        response = client.chat.completions.create(
+        response = openai.ChatCompletion.create(
             model=model,
             messages=[
                 {"role": "system", "content": system_message},
@@ -43,7 +41,7 @@ def send_request_to_openai(prompt, model="gpt-3.5-turbo", max_tokens=4000):
             max_tokens=max_tokens,
             temperature=0.7,
         )
-        return response.choices[0].message.content.strip()
+        return response.choices[0].message['content'].strip()
     except Exception as e:
         print(f"Error communicating with OpenAI: {e}")
         return None
