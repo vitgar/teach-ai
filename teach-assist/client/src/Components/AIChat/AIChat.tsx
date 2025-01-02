@@ -11,6 +11,7 @@ import {
 import { Send as SendIcon } from '@mui/icons-material';
 import ReactMarkdown from 'react-markdown';
 import { useTeacher } from '../../context/TeacherContext';
+import { aiAxiosInstance } from '../../utils/axiosInstance';
 
 interface Message {
   role: 'user' | 'assistant';
@@ -49,7 +50,7 @@ const AIChat: React.FC = () => {
 
     try {
       abortController.current = new AbortController();
-      const response = await fetch('http://localhost:5001/chat', {
+      const response = await fetch(`${aiAxiosInstance.defaults.baseURL}/chat`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
