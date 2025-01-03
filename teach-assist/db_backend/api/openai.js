@@ -15,7 +15,7 @@ router.post('/generate-warmup', auth, async (req, res) => {
     const prompt = `Create a short 2-minute mini lesson or word bank for ${topic} that can be used as a warm-up activity in a guided reading session. Keep it concise and grade-appropriate.`;
 
     const completion = await openai.createCompletion({
-      model: "gpt-3.5-turbo-instruct",
+      model: "gpt-4o",
       prompt: prompt,
       max_tokens: 200,
       temperature: 0.7,
