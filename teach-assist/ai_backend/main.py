@@ -14,7 +14,12 @@ load_dotenv()
 
 # Set OpenAI API key
 openai.api_key = os.environ.get("OPENAI_API_KEY")
+print(f"OpenAI API key status: {'Configured' if openai.api_key else 'Not configured'}")
+print(f"OpenAI API key length: {len(openai.api_key) if openai.api_key else 0}")
+print(f"OpenAI API key prefix: {openai.api_key[:7] + '...' if openai.api_key else 'None'}")
+
 if not openai.api_key:
+    print("WARNING: OPENAI_API_KEY is not set in environment variables.")
     raise ValueError("OPENAI_API_KEY is not set in environment variables.")
 
 # Initialize FastAPI application
@@ -228,8 +233,13 @@ async def chat(request: ChatRequest):
     Have a conversation with the AI teaching assistant.
     """
     try:
+        print("Chat endpoint called")
+        print(f"OpenAI API key status: {'Configured' if openai.api_key else 'Not configured'}")
+        print(f"OpenAI API key length: {len(openai.api_key) if openai.api_key else 0}")
+        print(f"OpenAI API key prefix: {openai.api_key[:7] + '...' if openai.api_key else 'None'}")
+
         if not openai.api_key:
-            print("OpenAI API key is not set")
+            print("ERROR: OpenAI API key is not set")
             raise HTTPException(status_code=500, detail="OpenAI API key is not configured")
 
         system_prompt = """You are a helpful teaching assistant with expertise in education. 
