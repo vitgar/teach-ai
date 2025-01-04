@@ -1,13 +1,14 @@
 # # main.py
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Header, Depends
 from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
 from lesson_plan_generator import send_request_to_openai
 import openai
 import os
 from dotenv import load_dotenv
-from typing import List
+from typing import List, Optional
+import jwt
 
 # Load environment variables from a .env file
 load_dotenv()
@@ -17,6 +18,26 @@ openai.api_key = os.environ.get("OPENAI_API_KEY")
 print(f"OpenAI API key status: {'Configured' if openai.api_key else 'Not configured'}")
 print(f"OpenAI API key length: {len(openai.api_key) if openai.api_key else 0}")
 print(f"OpenAI API key prefix: {openai.api_key[:7] + '...' if openai.api_key else 'None'}")
+
+# JWT configuration
+JWT_SECRET = os.environ.get("JWT_SECRET", "your-secret-key")  # Use environment variable in production
+
+async def verify_token(authorization: Optional[str] = Header(None)):
+    if not authorization:
+        raise HTTPException(status_code=401, detail="Authorization header missing")
+    
+    try:
+        scheme, token = authorization.split()
+        if scheme.lower() != 'bearer':
+            raise HTTPException(status_code=401, detail="Invalid authentication scheme")
+        
+        payload = jwt.decode(token, JWT_SECRET, algorithms=["HS256"])
+        return payload
+    except jwt.InvalidTokenError:
+        raise HTTPException(status_code=401, detail="Invalid token")
+    except Exception as e:
+        print(f"Auth error: {str(e)}")
+        raise HTTPException(status_code=401, detail="Authentication failed")
 
 if not openai.api_key:
     print("WARNING: OPENAI_API_KEY is not set in environment variables.")
@@ -228,7 +249,7 @@ async def generate_assessment(request: GenerateAssessmentRequest):
 
 # Route for chat interactions
 @app.post("/chat", response_model=ChatResponse)
-async def chat(request: ChatRequest):
+async def chat(request: ChatRequest, token_payload: dict = Depends(verify_token)):
     """
     Have a conversation with the AI teaching assistant.
     """
@@ -238,6 +259,7 @@ async def chat(request: ChatRequest):
         print(f"OpenAI API key length: {len(openai.api_key) if openai.api_key else 0}")
         print(f"OpenAI API key prefix: {openai.api_key[:7] + '...' if openai.api_key else 'None'}")
         print(f"Environment: {os.environ.get('ENVIRONMENT', 'not set')}")
+        print(f"User ID from token: {token_payload.get('teacherId', 'not found')}")
 
         if not openai.api_key:
             print("ERROR: OpenAI API key is not set")
