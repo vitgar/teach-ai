@@ -23,9 +23,6 @@ if not openai_api_key:
     print("WARNING: OPENAI_API_KEY is not set in environment variables.")
     raise ValueError("OPENAI_API_KEY is not set in environment variables.")
 
-# Initialize OpenAI client
-client = openai.OpenAI(api_key=openai_api_key)
-
 # JWT configuration
 JWT_SECRET = os.environ.get("JWT_SECRET", "hPp0DlBqrAylk1TB1g/a7hM2jFeVkxfEQgFnJ4NXb2Ul5QWJ1gpV2F/PFdspKd2IudfDnyI9gfGHFGhH9A==")
 print(f"JWT_SECRET status: {'Configured' if JWT_SECRET != 'your-secret-key' else 'Using default'}")
@@ -285,6 +282,12 @@ async def chat(request: ChatRequest, token_payload: dict = Depends(verify_token)
         print(f"Sending request to OpenAI API with message: {request.message[:100]}...")
         
         try:
+            # Initialize OpenAI client for each request
+            client = openai.OpenAI(
+                api_key=openai_api_key,
+                base_url="https://api.openai.com/v1"
+            )
+            
             response = client.chat.completions.create(
                 model="gpt-3.5-turbo",
                 messages=[
