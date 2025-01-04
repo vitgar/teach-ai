@@ -21,19 +21,27 @@ print(f"OpenAI API key prefix: {openai.api_key[:7] + '...' if openai.api_key els
 
 # JWT configuration
 JWT_SECRET = os.environ.get("JWT_SECRET", "your-secret-key")  # Use environment variable in production
+print(f"JWT_SECRET status: {'Configured' if JWT_SECRET != 'your-secret-key' else 'Using default'}")
 
 async def verify_token(authorization: Optional[str] = Header(None)):
     if not authorization:
+        print("No authorization header found")
         raise HTTPException(status_code=401, detail="Authorization header missing")
     
     try:
+        print("Verifying token...")
         scheme, token = authorization.split()
         if scheme.lower() != 'bearer':
+            print(f"Invalid scheme: {scheme}")
             raise HTTPException(status_code=401, detail="Invalid authentication scheme")
         
+        print(f"Token length: {len(token)}")
+        print(f"JWT_SECRET length: {len(JWT_SECRET)}")
         payload = jwt.decode(token, JWT_SECRET, algorithms=["HS256"])
+        print(f"Token decoded successfully. Payload: {payload}")
         return payload
-    except jwt.InvalidTokenError:
+    except jwt.InvalidTokenError as e:
+        print(f"Invalid token error: {str(e)}")
         raise HTTPException(status_code=401, detail="Invalid token")
     except Exception as e:
         print(f"Auth error: {str(e)}")
