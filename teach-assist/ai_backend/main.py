@@ -282,10 +282,9 @@ async def chat(request: ChatRequest, token_payload: dict = Depends(verify_token)
         print(f"Sending request to OpenAI API with message: {request.message[:100]}...")
         
         try:
-            # Initialize OpenAI client for each request
-            client = openai.Client(key=openai_api_key)
-            
-            response = client.chat.completions.create(
+            # Use the old OpenAI API format
+            openai.api_key = openai_api_key
+            response = openai.ChatCompletion.create(
                 model="gpt-3.5-turbo",
                 messages=[
                     {"role": "system", "content": system_prompt},
@@ -300,7 +299,7 @@ async def chat(request: ChatRequest, token_payload: dict = Depends(verify_token)
             print(f"Error type: {type(api_error).__name__}")
             raise
 
-        chat_response = response.choices[0].message.content.strip()
+        chat_response = response.choices[0].message['content'].strip()
         print(f"Received response from OpenAI API: {chat_response[:100]}...")
         return ChatResponse(response=chat_response)
 
