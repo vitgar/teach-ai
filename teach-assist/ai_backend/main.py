@@ -237,6 +237,7 @@ async def chat(request: ChatRequest):
         print(f"OpenAI API key status: {'Configured' if openai.api_key else 'Not configured'}")
         print(f"OpenAI API key length: {len(openai.api_key) if openai.api_key else 0}")
         print(f"OpenAI API key prefix: {openai.api_key[:7] + '...' if openai.api_key else 'None'}")
+        print(f"Environment: {os.environ.get('ENVIRONMENT', 'not set')}")
 
         if not openai.api_key:
             print("ERROR: OpenAI API key is not set")
@@ -250,34 +251,41 @@ async def chat(request: ChatRequest):
         
         print(f"Sending request to OpenAI API with message: {request.message[:100]}...")
         
-        response = openai.ChatCompletion.create(
-            model="gpt-3.5-turbo",
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": f"{request.message}{context}"}
-            ],
-            temperature=0.7,
-            max_tokens=500
-        )
+        try:
+            response = openai.ChatCompletion.create(
+                model="gpt-3.5-turbo",
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": f"{request.message}{context}"}
+                ],
+                temperature=0.7,
+                max_tokens=500
+            )
+            print("OpenAI API request successful")
+        except Exception as api_error:
+            print(f"Detailed OpenAI API error: {str(api_error)}")
+            print(f"Error type: {type(api_error).__name__}")
+            raise
 
         chat_response = response.choices[0].message['content'].strip()
         print(f"Received response from OpenAI API: {chat_response[:100]}...")
         return ChatResponse(response=chat_response)
 
     except openai.error.AuthenticationError as e:
-        print(f"OpenAI Authentication error: {e}")
-        raise HTTPException(status_code=500, detail="Authentication failed with OpenAI API")
+        print(f"OpenAI Authentication error details: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Authentication failed with OpenAI API: {str(e)}")
     
     except openai.error.RateLimitError as e:
-        print(f"OpenAI Rate limit error: {e}")
-        raise HTTPException(status_code=429, detail="Rate limit exceeded with OpenAI API")
+        print(f"OpenAI Rate limit error details: {str(e)}")
+        raise HTTPException(status_code=429, detail=f"Rate limit exceeded with OpenAI API: {str(e)}")
     
     except openai.error.OpenAIError as e:
-        print(f"OpenAI API error: {e}")
+        print(f"OpenAI API error details: {str(e)}")
         raise HTTPException(status_code=500, detail=f"OpenAI API error: {str(e)}")
     
     except Exception as e:
         print(f"Unexpected error in chat endpoint: {str(e)}")
+        print(f"Error type: {type(e).__name__}")
         raise HTTPException(status_code=500, detail=f"An unexpected error occurred: {str(e)}")
 
 # Health check endpoint
