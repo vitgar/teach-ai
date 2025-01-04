@@ -14,10 +14,17 @@ import jwt
 load_dotenv()
 
 # Set OpenAI API key
-openai.api_key = os.environ.get("OPENAI_API_KEY")
-print(f"OpenAI API key status: {'Configured' if openai.api_key else 'Not configured'}")
-print(f"OpenAI API key length: {len(openai.api_key) if openai.api_key else 0}")
-print(f"OpenAI API key prefix: {openai.api_key[:7] + '...' if openai.api_key else 'None'}")
+openai_api_key = os.environ.get("OPENAI_API_KEY")
+print(f"OpenAI API key status: {'Configured' if openai_api_key else 'Not configured'}")
+print(f"OpenAI API key length: {len(openai_api_key) if openai_api_key else 0}")
+print(f"OpenAI API key prefix: {openai_api_key[:7] + '...' if openai_api_key else 'None'}")
+
+if not openai_api_key:
+    print("WARNING: OPENAI_API_KEY is not set in environment variables.")
+    raise ValueError("OPENAI_API_KEY is not set in environment variables.")
+
+# Initialize OpenAI client
+client = openai.OpenAI(api_key=openai_api_key)
 
 # JWT configuration
 JWT_SECRET = os.environ.get("JWT_SECRET", "hPp0DlBqrAylk1TB1g/a7hM2jFeVkxfEQgFnJ4NXb2Ul5QWJ1gpV2F/PFdspKd2IudfDnyI9gfGHFGhH9A==")
@@ -46,10 +53,6 @@ async def verify_token(authorization: Optional[str] = Header(None)):
     except Exception as e:
         print(f"Auth error: {str(e)}")
         raise HTTPException(status_code=401, detail="Authentication failed")
-
-if not openai.api_key:
-    print("WARNING: OPENAI_API_KEY is not set in environment variables.")
-    raise ValueError("OPENAI_API_KEY is not set in environment variables.")
 
 # Initialize FastAPI application
 app = FastAPI(
@@ -263,13 +266,13 @@ async def chat(request: ChatRequest, token_payload: dict = Depends(verify_token)
     """
     try:
         print("Chat endpoint called")
-        print(f"OpenAI API key status: {'Configured' if openai.api_key else 'Not configured'}")
-        print(f"OpenAI API key length: {len(openai.api_key) if openai.api_key else 0}")
-        print(f"OpenAI API key prefix: {openai.api_key[:7] + '...' if openai.api_key else 'None'}")
+        print(f"OpenAI API key status: {'Configured' if openai_api_key else 'Not configured'}")
+        print(f"OpenAI API key length: {len(openai_api_key) if openai_api_key else 0}")
+        print(f"OpenAI API key prefix: {openai_api_key[:7] + '...' if openai_api_key else 'None'}")
         print(f"Environment: {os.environ.get('ENVIRONMENT', 'not set')}")
         print(f"User ID from token: {token_payload.get('teacherId', 'not found')}")
 
-        if not openai.api_key:
+        if not openai_api_key:
             print("ERROR: OpenAI API key is not set")
             raise HTTPException(status_code=500, detail="OpenAI API key is not configured")
 
@@ -282,7 +285,6 @@ async def chat(request: ChatRequest, token_payload: dict = Depends(verify_token)
         print(f"Sending request to OpenAI API with message: {request.message[:100]}...")
         
         try:
-            client = openai.Client(api_key=openai.api_key)
             response = client.chat.completions.create(
                 model="gpt-3.5-turbo",
                 messages=[
