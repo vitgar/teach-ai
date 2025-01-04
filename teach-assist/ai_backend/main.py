@@ -283,10 +283,7 @@ async def chat(request: ChatRequest, token_payload: dict = Depends(verify_token)
         
         try:
             # Initialize OpenAI client for each request
-            client = openai.OpenAI(
-                api_key=openai_api_key,
-                base_url="https://api.openai.com/v1"
-            )
+            client = openai.Client(key=openai_api_key)
             
             response = client.chat.completions.create(
                 model="gpt-3.5-turbo",
