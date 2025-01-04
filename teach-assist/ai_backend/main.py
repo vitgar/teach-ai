@@ -20,7 +20,7 @@ print(f"OpenAI API key length: {len(openai.api_key) if openai.api_key else 0}")
 print(f"OpenAI API key prefix: {openai.api_key[:7] + '...' if openai.api_key else 'None'}")
 
 # JWT configuration
-JWT_SECRET = os.environ.get("JWT_SECRET", "your-secret-key")  # Use environment variable in production
+JWT_SECRET = os.environ.get("JWT_SECRET", "hPp0DlBqrAylk1TB1g/a7hM2jFeVkxfEQgFnJ4NXb2Ul5QWJ1gpV2F/PFdspKd2IudfDnyI9gfGHFGhH9A==")
 print(f"JWT_SECRET status: {'Configured' if JWT_SECRET != 'your-secret-key' else 'Using default'}")
 
 async def verify_token(authorization: Optional[str] = Header(None)):
