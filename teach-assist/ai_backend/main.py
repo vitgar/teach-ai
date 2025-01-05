@@ -11,6 +11,7 @@ from dotenv import load_dotenv
 from typing import List, Optional
 import jwt
 from openai import OpenAI
+import json
 
 # Load environment variables from a .env file
 load_dotenv()
@@ -184,11 +185,39 @@ async def generate_story(request: GenerateStoryRequest):
     Generate a story using OpenAI's GPT model.
     """
     try:
-        prompt = f"Generate an engaging and age-appropriate story based on the following prompt:\n\n{request.prompt}"
-        story = send_request_to_openai(prompt)
-        if story is None:
-            raise HTTPException(status_code=500, detail="Failed to generate story")
-        return GenerateStoryResponse(story=story)
+        prompt = f"""Generate an engaging and age-appropriate story based on the following prompt:
+        Topic: {request.prompt}
+        
+        Format the response in clear markdown with appropriate headers and sections.
+        Keep the story concise and focused on the main points."""
+        
+        try:
+            client = OpenAI(api_key=openai_api_key)
+            response = client.chat.completions.create(
+                model="gpt-4o",
+                messages=[
+                    {"role": "system", "content": "You are an expert at creating engaging educational stories."},
+                    {"role": "user", "content": prompt}
+                ],
+                temperature=0.7,
+                stream=True
+            )
+            
+            async def generate():
+                story_text = ""
+                for chunk in response:
+                    if chunk.choices[0].delta.content is not None:
+                        content = chunk.choices[0].delta.content
+                        story_text += content
+                        yield f"data: {json.dumps({'content': content})}\n\n"
+                yield f"data: {json.dumps({'type': 'complete', 'content': story_text})}\n\n"
+
+            return StreamingResponse(generate(), media_type='text/event-stream')
+
+        except Exception as api_error:
+            print(f"OpenAI API error: {str(api_error)}")
+            raise
+
     except Exception as e:
         print(f"Unexpected error: {e}")
         raise HTTPException(status_code=500, detail="An unexpected error occurred.")
@@ -202,17 +231,69 @@ async def generate_lesson_plan(request: GenerateLessonPlanRequest):
     try:
         prompt = f"""Generate a {request.lesson_type} lesson plan for grade {request.grade_level} on the topic: {request.topic}
         {f'Align with these standards: {request.standards}' if request.standards else ''}
-        Include:
-        - Learning objectives
-        - Materials needed
-        - Step-by-step instructions
-        - Assessment strategies
-        - Differentiation options"""
         
-        lesson_plan = send_request_to_openai(prompt)
-        if lesson_plan is None:
-            raise HTTPException(status_code=500, detail="Failed to generate lesson plan")
-        return GenerateLessonPlanResponse(lesson_plan=lesson_plan)
+        Include the following sections:
+        ### Lesson Overview
+        - Grade Level
+        - Subject Area
+        - Duration
+        - Topic
+        
+        ### Learning Objectives
+        - What students will know
+        - What students will be able to do
+        
+        ### Materials Needed
+        - List all required materials
+        
+        ### Lesson Structure
+        1. Opening/Hook (5-10 minutes)
+        2. Main Activity (20-30 minutes)
+        3. Practice/Application (15-20 minutes)
+        4. Closure (5-10 minutes)
+        
+        ### Assessment Strategies
+        - How you will check for understanding
+        - Any specific assessment tasks
+        
+        ### Differentiation Strategies
+        - For struggling students
+        - For advanced students
+        - For ELL students
+        
+        ### Extensions and Homework
+        - Additional practice
+        - Related assignments
+        
+        Format the response in clear markdown with appropriate headers and sections."""
+        
+        try:
+            client = OpenAI(api_key=openai_api_key)
+            response = client.chat.completions.create(
+                model="gpt-4o",
+                messages=[
+                    {"role": "system", "content": "You are an expert teacher and curriculum developer."},
+                    {"role": "user", "content": prompt}
+                ],
+                temperature=0.7,
+                stream=True
+            )
+            
+            async def generate():
+                lesson_text = ""
+                for chunk in response:
+                    if chunk.choices[0].delta.content is not None:
+                        content = chunk.choices[0].delta.content
+                        lesson_text += content
+                        yield f"data: {json.dumps({'content': content})}\n\n"
+                yield f"data: {json.dumps({'type': 'complete', 'content': lesson_text})}\n\n"
+
+            return StreamingResponse(generate(), media_type='text/event-stream')
+
+        except Exception as api_error:
+            print(f"OpenAI API error: {str(api_error)}")
+            raise
+
     except Exception as e:
         print(f"Unexpected error: {e}")
         raise HTTPException(status_code=500, detail="An unexpected error occurred.")
