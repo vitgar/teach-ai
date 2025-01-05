@@ -189,20 +189,24 @@ async def generate_story(request: GenerateStoryRequest):
         Topic: {request.prompt}
         
         Format the response in clear markdown with these exact sections:
-        # Story Title
-        
-        [A creative, engaging title for the story]
+        # [A creative, engaging title for the story]
         
         ## Introduction
-        [Opening paragraph introducing the setting and main characters]
+        [One clear, engaging paragraph introducing the setting and main characters]
         
         ## Main Story
-        [2-3 paragraphs developing the story with clear beginning, middle, and end]
+        [First main paragraph developing the story's beginning]
+        
+        [Second paragraph showing the middle/conflict of the story]
+        
+        [Third paragraph building to the story's climax]
         
         ## Conclusion
-        [Final paragraph wrapping up the story and its message]
+        [Final paragraph wrapping up the story with a clear resolution and message]
         
-        Keep paragraphs short and focused, with clear transitions between sections."""
+        Keep each paragraph focused and engaging, with clear transitions between sections.
+        Use descriptive language and age-appropriate vocabulary.
+        Ensure proper spacing between sections for readability."""
         
         try:
             client = OpenAI(api_key=openai_api_key)
@@ -212,11 +216,13 @@ async def generate_story(request: GenerateStoryRequest):
                     {
                         "role": "system", 
                         "content": """You are an expert at creating engaging educational stories.
-                        Format your stories with clear sections and proper markdown:
-                        - Use # for the title
-                        - Use ## for section headers
-                        - Keep paragraphs short and focused
-                        - Use proper spacing between sections"""
+                        Follow these formatting rules exactly:
+                        1. Use a single # for the main title
+                        2. Use ## for each section header
+                        3. Leave one blank line between sections
+                        4. Keep paragraphs short (3-4 sentences)
+                        5. Use descriptive language
+                        6. Include proper spacing for readability"""
                     },
                     {"role": "user", "content": prompt}
                 ],
@@ -571,6 +577,65 @@ async def generate_guided_reading_intro(request: dict):
                         intro_text += content
                         yield f"data: {json.dumps({'content': content})}\n\n"
                 yield f"data: {json.dumps({'type': 'complete', 'content': intro_text})}\n\n"
+
+            return StreamingResponse(generate(), media_type='text/event-stream')
+
+        except Exception as api_error:
+            print(f"OpenAI API error: {str(api_error)}")
+            raise
+
+    except Exception as e:
+        print(f"Unexpected error: {e}")
+        raise HTTPException(status_code=500, detail="An unexpected error occurred.")
+
+@app.post("/generate-exit-ticket")
+async def generate_exit_ticket(request: dict):
+    """
+    Generate an exit ticket for lesson assessment.
+    """
+    try:
+        prompt = f"""Create a brief exit ticket assessment for {request.get('skill')}.
+
+        Format the response in markdown:
+        ### Exit Ticket: {request.get('skill')}
+
+        **Learning Target Check:**
+        [Brief statement of what students should have learned]
+
+        **Questions:**
+        1. [First question about {request.get('skill')}]
+        2. [Second question about {request.get('skill')}]
+        3. [Quick application task]
+
+        **Success Criteria:**
+        - [What a complete answer looks like]
+        - [Key points students should include]
+
+        **Teacher Notes:**
+        - [What to look for in responses]
+        - [Common misconceptions to address]
+        - [Next steps based on responses]"""
+
+        try:
+            client = OpenAI(api_key=openai_api_key)
+            response = client.chat.completions.create(
+                model="gpt-4o",
+                messages=[
+                    {"role": "system", "content": "You are an expert at creating focused assessment tools for checking student understanding."},
+                    {"role": "user", "content": prompt}
+                ],
+                temperature=0.7,
+                stream=True
+            )
+            
+            async def generate():
+                ticket_text = ""
+                for chunk in response:
+                    if chunk.choices[0].delta.content is not None:
+                        content = chunk.choices[0].delta.content
+                        ticket_text += content
+                        yield f"data: {json.dumps({'content': content})}\n\n"
+                yield f"data: {json.dumps({'type': 'complete', 'content': ticket_text})}\n\n"
 
             return StreamingResponse(generate(), media_type='text/event-stream')
 
