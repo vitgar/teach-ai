@@ -188,15 +188,36 @@ async def generate_story(request: GenerateStoryRequest):
         prompt = f"""Generate an engaging and age-appropriate story based on the following prompt:
         Topic: {request.prompt}
         
-        Format the response in clear markdown with appropriate headers and sections.
-        Keep the story concise and focused on the main points."""
+        Format the response in clear markdown with these exact sections:
+        # Story Title
+        
+        [A creative, engaging title for the story]
+        
+        ## Introduction
+        [Opening paragraph introducing the setting and main characters]
+        
+        ## Main Story
+        [2-3 paragraphs developing the story with clear beginning, middle, and end]
+        
+        ## Conclusion
+        [Final paragraph wrapping up the story and its message]
+        
+        Keep paragraphs short and focused, with clear transitions between sections."""
         
         try:
             client = OpenAI(api_key=openai_api_key)
             response = client.chat.completions.create(
                 model="gpt-4o",
                 messages=[
-                    {"role": "system", "content": "You are an expert at creating engaging educational stories."},
+                    {
+                        "role": "system", 
+                        "content": """You are an expert at creating engaging educational stories.
+                        Format your stories with clear sections and proper markdown:
+                        - Use # for the title
+                        - Use ## for section headers
+                        - Keep paragraphs short and focused
+                        - Use proper spacing between sections"""
+                    },
                     {"role": "user", "content": prompt}
                 ],
                 temperature=0.7,
@@ -307,12 +328,51 @@ async def generate_warmup(request: GenerateWarmupRequest):
     try:
         grade_level_text = f" for grade {request.grade_level}" if request.grade_level else ""
         prompt = f"""Create a short 2-3 minute warmup activity{grade_level_text} on the topic: {request.topic}
-        The warmup should be engaging and help students prepare for the main lesson."""
         
-        warmup = send_request_to_openai(prompt)
-        if warmup is None:
-            raise HTTPException(status_code=500, detail="Failed to generate warmup")
-        return GenerateWarmupResponse(warmup=warmup)
+        Format the response in clear markdown with these exact sections:
+        ### Warm-Up Activity: {request.topic}
+
+        **Time:** 2-3 minutes
+
+        **Objective:**
+        [Brief statement of what students will do]
+
+        **Activity Steps:**
+        1. [First step]
+        2. [Second step]
+        3. [Third step]
+
+        **Teacher Notes:**
+        - [Important points to remember]
+        - [What to look for]"""
+        
+        try:
+            client = OpenAI(api_key=openai_api_key)
+            response = client.chat.completions.create(
+                model="gpt-4o",
+                messages=[
+                    {"role": "system", "content": "You are an expert at creating engaging warm-up activities for reading lessons."},
+                    {"role": "user", "content": prompt}
+                ],
+                temperature=0.7,
+                stream=True
+            )
+            
+            async def generate():
+                warmup_text = ""
+                for chunk in response:
+                    if chunk.choices[0].delta.content is not None:
+                        content = chunk.choices[0].delta.content
+                        warmup_text += content
+                        yield f"data: {json.dumps({'content': content})}\n\n"
+                yield f"data: {json.dumps({'type': 'complete', 'content': warmup_text})}\n\n"
+
+            return StreamingResponse(generate(), media_type='text/event-stream')
+
+        except Exception as api_error:
+            print(f"OpenAI API error: {str(api_error)}")
+            raise
+
     except Exception as e:
         print(f"Unexpected error: {e}")
         raise HTTPException(status_code=500, detail="An unexpected error occurred.")
