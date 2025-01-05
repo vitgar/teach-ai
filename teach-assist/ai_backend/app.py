@@ -16,7 +16,12 @@ load_dotenv()
 app = Flask(__name__)
 CORS(app, resources={
     r"/*": {
-        "origins": ["http://localhost:3000", "https://teach-ai-beige.vercel.app"],
+        "origins": [
+            "http://localhost:3000",
+            "https://teach-ai-beige.vercel.app",
+            "https://teach-ai-aq9x.vercel.app",
+            "https://teach-ai-db-backend.vercel.app"
+        ],
         "methods": ["GET", "POST", "OPTIONS"],
         "allow_headers": ["Content-Type", "Authorization"],
         "supports_credentials": True,
