@@ -281,9 +281,12 @@ Explanation: [Detailed explanation]
                 messages=[
                     {
                         "role": "system",
-                        "content": "You are an expert in creating Lexile-appropriate reading passages."
+                        "content": [{"type": "text", "text": "You are an expert in creating Lexile-appropriate reading passages."}]
                     },
-                    {"role": "user", "content": prompt}
+                    {
+                        "role": "user",
+                        "content": [{"type": "text", "text": prompt}]
+                    }
                 ],
                 temperature=API_SETTINGS["temperature"],
                 stream=True,
@@ -869,17 +872,23 @@ def chat():
             response = client.chat.completions.create(
                 model=ENDPOINT_MODELS["chat"],
                 messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": message}
+                    {
+                        "role": "system",
+                        "content": [{"type": "text", "text": system_prompt}]
+                    },
+                    {
+                        "role": "user",
+                        "content": [{"type": "text", "text": message}]
+                    }
                 ],
                 stream=True
             )
-
+            
             for chunk in response:
                 if chunk.choices[0].delta.content:
                     yield chunk.choices[0].delta.content
 
-        return Response(stream_with_context(generate()), mimetype='text/event-stream')
+        return Response(stream_with_context(generate()), mimetype='text/plain')
 
     except Exception as e:
         print(f"Error in chat: {str(e)}")
