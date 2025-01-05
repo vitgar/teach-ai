@@ -1,6 +1,6 @@
 # # main.py
 
-from fastapi import FastAPI, HTTPException, Header, Depends
+from fastapi import FastAPI, HTTPException, Header, Depends, StreamingResponse
 from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
 from lesson_plan_generator import send_request_to_openai
@@ -273,7 +273,13 @@ async def chat(request: ChatRequest, token_payload: dict = Depends(verify_token)
 
         system_prompt = """You are a helpful teaching assistant with expertise in education. 
         You provide clear, concise, and practical advice to teachers. 
-        Focus on being specific and actionable in your responses."""
+        Focus on being specific and actionable in your responses.
+        Format your responses in a clear, structured way using markdown:
+        - Use headers (###) for main sections
+        - Use bullet points for lists
+        - Use bold (**) for emphasis
+        - Break up text into readable paragraphs
+        - Include numbered steps where appropriate"""
         
         context = f"\nContext: {request.context}" if request.context else ""
         
@@ -282,23 +288,26 @@ async def chat(request: ChatRequest, token_payload: dict = Depends(verify_token)
         try:
             client = OpenAI(api_key=openai_api_key)
             response = client.chat.completions.create(
-                model="gpt-4o",
+                model="gpt-4",
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": f"{request.message}{context}"}
                 ],
                 temperature=0.7,
-                max_tokens=500
+                stream=True
             )
-            print("OpenAI API request successful")
+            
+            async def generate():
+                for chunk in response:
+                    if chunk.choices[0].delta.content is not None:
+                        yield chunk.choices[0].delta.content
+
+            return StreamingResponse(generate(), media_type='text/plain')
+
         except Exception as api_error:
             print(f"Detailed OpenAI API error: {str(api_error)}")
             print(f"Error type: {type(api_error).__name__}")
             raise
-
-        chat_response = response.choices[0].message.content.strip()
-        print(f"Received response from OpenAI API: {chat_response[:100]}...")
-        return ChatResponse(response=chat_response)
 
     except Exception as e:
         print(f"Unexpected error in chat endpoint: {str(e)}")

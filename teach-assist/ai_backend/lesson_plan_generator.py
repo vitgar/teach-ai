@@ -1,47 +1,90 @@
 # lesson_plan_generator.py
 
-import openai
 import os
+from openai import OpenAI
 from dotenv import load_dotenv
 
-# Load environment variables from a .env file
 load_dotenv()
 
-# Set OpenAI API key
-openai.api_key = os.environ.get("OPENAI_API_KEY")
+# Initialize OpenAI client
+client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
 
-system_message = """
-You are an experienced bilingual elementary school teacher with expertise in creating educational content. Your role is to:
-
-1. Develop comprehensive and professional lesson plans.
-2. Design engaging and interactive activities tailored to the learning objectives.
-3. Write creative stories and construct effective tests to assess students' understanding.
-
-You will receive specific parameters to customize your responses, such as:
-- **Topic**: The subject or concept the lesson will focus on.
-- **Grade Level**: The intended grade level of the students.
-- **Standards**: Educational standards to align with, such as Texas TEKS, Common Core, or other state or national standards.
-- **Lesson Type**: Whether to create a complete lesson, a mini-lesson, or an intervention lesson.
-
-Based on these inputs, you will generate lesson plans that include objectives, materials, activities, assessments, and differentiation strategies as needed. Your goal is to ensure all lessons are age-appropriate, culturally relevant, and aligned with the specified standards, whether in English, Spanish, or both.
-Respond to the prompts with detailed and engaging content to meet the educational needs of diverse learners.
-Markdown formatting is supported for clear and structured responses.
-The first header should be an h4 (####) followed by logically organized sections.
-The inner headings should be h5 (#####) or h6 (######) to maintain a clear hierarchy.
-"""
-
-def send_request_to_openai(prompt, model="gpt-4o-mini", max_tokens=4000):
+def send_request_to_openai(prompt: str) -> str:
+    """
+    Send a request to OpenAI's API and return the response.
+    """
     try:
-        response = openai.ChatCompletion.create(
-            model=model,
+        response = client.chat.completions.create(
+            model="gpt-4",
             messages=[
-                {"role": "system", "content": system_message},
-                {"role": "user", "content": prompt}
+                {
+                    "role": "system",
+                    "content": """You are an expert teacher and curriculum developer.
+                    Create detailed, practical, and engaging educational content.
+                    Format your responses in a clear, structured way using markdown:
+                    - Use headers (###) for main sections
+                    - Use bullet points for lists
+                    - Use bold (**) for emphasis
+                    - Break up text into readable paragraphs
+                    - Include numbered steps where appropriate"""
+                },
+                {
+                    "role": "user",
+                    "content": prompt
+                }
             ],
-            max_tokens=max_tokens,
-            temperature=0.7,
+            temperature=0.7
         )
-        return response.choices[0].message['content'].strip()
+        
+        return response.choices[0].message.content.strip()
     except Exception as e:
-        print(f"Error communicating with OpenAI: {e}")
+        print(f"Error in OpenAI request: {str(e)}")
+        return None
+
+def generate_lesson_plan(topic: str, grade_level: str, standards: str = None) -> str:
+    """
+    Generate a complete lesson plan using OpenAI's API.
+    """
+    try:
+        prompt = f"""Create a detailed lesson plan for grade {grade_level} on the topic: {topic}
+        {f'Align with these standards: {standards}' if standards else ''}
+        
+        Include the following sections:
+        ### Lesson Overview
+        - Grade Level
+        - Subject Area
+        - Duration
+        - Topic
+        
+        ### Learning Objectives
+        - What students will know
+        - What students will be able to do
+        
+        ### Materials Needed
+        - List all required materials
+        
+        ### Lesson Structure
+        1. Opening/Hook (5-10 minutes)
+        2. Main Activity (20-30 minutes)
+        3. Practice/Application (15-20 minutes)
+        4. Closure (5-10 minutes)
+        
+        ### Assessment Strategies
+        - How you will check for understanding
+        - Any specific assessment tasks
+        
+        ### Differentiation Strategies
+        - For struggling students
+        - For advanced students
+        - For ELL students
+        
+        ### Extensions and Homework
+        - Additional practice
+        - Related assignments
+        
+        Format the response in clear markdown with appropriate headers and sections."""
+        
+        return send_request_to_openai(prompt)
+    except Exception as e:
+        print(f"Error generating lesson plan: {str(e)}")
         return None
