@@ -188,13 +188,16 @@ async def generate_story(request: GenerateStoryRequest):
         prompt = f"""Generate an engaging and age-appropriate story based on the following prompt:
         Topic: {request.prompt}
         
-        Format the response in clear markdown with these exact sections:
-        # [A creative, engaging title for the story]
+        Follow this exact format with proper line spacing:
+        
+        # [Story Title]
         
         ## Introduction
+        
         [One clear, engaging paragraph introducing the setting and main characters]
         
         ## Main Story
+        
         [First main paragraph developing the story's beginning]
         
         [Second paragraph showing the middle/conflict of the story]
@@ -202,11 +205,8 @@ async def generate_story(request: GenerateStoryRequest):
         [Third paragraph building to the story's climax]
         
         ## Conclusion
-        [Final paragraph wrapping up the story with a clear resolution and message]
         
-        Keep each paragraph focused and engaging, with clear transitions between sections.
-        Use descriptive language and age-appropriate vocabulary.
-        Ensure proper spacing between sections for readability."""
+        [Final paragraph wrapping up the story with a clear resolution and message]"""
         
         try:
             client = OpenAI(api_key=openai_api_key)
@@ -217,12 +217,14 @@ async def generate_story(request: GenerateStoryRequest):
                         "role": "system", 
                         "content": """You are an expert at creating engaging educational stories.
                         Follow these formatting rules exactly:
-                        1. Use a single # for the main title
-                        2. Use ## for each section header
-                        3. Leave one blank line between sections
-                        4. Keep paragraphs short (3-4 sentences)
-                        5. Use descriptive language
-                        6. Include proper spacing for readability"""
+                        1. Start with a single # for the title
+                        2. Add a blank line after the title
+                        3. Use ## for section headers
+                        4. Add a blank line after each section header
+                        5. Keep paragraphs short (3-4 sentences)
+                        6. Add a blank line between paragraphs
+                        7. Use descriptive language suitable for the target audience
+                        8. Do not include any placeholder text like [Story Title] - replace all placeholders with actual content"""
                     },
                     {"role": "user", "content": prompt}
                 ],
@@ -237,7 +239,9 @@ async def generate_story(request: GenerateStoryRequest):
                         content = chunk.choices[0].delta.content
                         story_text += content
                         yield f"data: {json.dumps({'content': content})}\n\n"
-                yield f"data: {json.dumps({'type': 'complete', 'content': story_text})}\n\n"
+                
+                # Send the complete story at the end for downloading
+                yield f"data: {json.dumps({'type': 'complete', 'content': story_text, 'downloadContent': story_text})}\n\n"
 
             return StreamingResponse(generate(), media_type='text/event-stream')
 
