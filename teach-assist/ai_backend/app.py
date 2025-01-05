@@ -9,6 +9,7 @@ from PIL import Image
 import io
 import re
 import pytesseract
+from config import OPENAI_MODELS, ENDPOINT_MODELS, API_SETTINGS
 
 load_dotenv()
 
@@ -274,9 +275,9 @@ Explanation: [Detailed explanation]
             print(prompt)
             print("========================\n")
 
-            # Generate the passage using OpenAI's API (assuming `client` is properly configured)
+            # Generate the passage using OpenAI's API
             response = client.chat.completions.create(
-                model="gpt-4o",  # Fixed model name
+                model=ENDPOINT_MODELS["generate_passage"],
                 messages=[
                     {
                         "role": "system",
@@ -284,9 +285,9 @@ Explanation: [Detailed explanation]
                     },
                     {"role": "user", "content": prompt}
                 ],
-                temperature=0.7,
+                temperature=API_SETTINGS["temperature"],
                 stream=True,
-                timeout=60  # Add timeout
+                timeout=API_SETTINGS["timeout"]
             )
 
             for chunk in response:
@@ -382,12 +383,12 @@ def generate_worksheet():
             [Answer key content here...]"""
 
             response = client.chat.completions.create(
-                model="gpt-4o-mini",
+                model=ENDPOINT_MODELS["generate_worksheet"],
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": main_prompt}
                 ],
-                temperature=0.7,
+                temperature=API_SETTINGS["temperature"],
                 stream=True
             )
 
@@ -454,12 +455,12 @@ def generate_warmup():
             """
 
             response = client.chat.completions.create(
-                model="gpt-4o-mini",
+                model=ENDPOINT_MODELS["generate_warmup"],
                 messages=[
                     {"role": "system", "content": "You are an expert at creating engaging warm-up activities for reading lessons."},
                     {"role": "user", "content": prompt}
                 ],
-                temperature=0.7,
+                temperature=API_SETTINGS["temperature"],
                 stream=True
             )
             
@@ -503,12 +504,12 @@ def generate_story():
             """
 
             story_response = client.chat.completions.create(
-                model="gpt-4o-mini",
+                model=ENDPOINT_MODELS["generate_story"],
                 messages=[
                     {"role": "system", "content": f"You are an expert at creating engaging stories at {lexile_level} reading level that subtly teach reading skills."},
                     {"role": "user", "content": story_prompt}
                 ],
-                temperature=0.7,
+                temperature=API_SETTINGS["temperature"],
                 stream=True
             )
             
@@ -531,12 +532,12 @@ def generate_story():
             Return just the title, no quotes or extra text."""
             
             title_response = client.chat.completions.create(
-                model="gpt-4o-mini",
+                model=ENDPOINT_MODELS["generate_story"],
                 messages=[
                     {"role": "system", "content": "Create engaging, story-specific titles that capture the essence of the story without revealing its teaching purpose."},
                     {"role": "user", "content": title_prompt}
                 ],
-                temperature=0.7,
+                temperature=API_SETTINGS["temperature"],
                 stream=True
             )
             
@@ -579,12 +580,12 @@ def generate_guided_reading_intro():
             """
 
             response = client.chat.completions.create(
-                model="gpt-4o-mini",
+                model=ENDPOINT_MODELS["generate_guided_reading_intro"],
                 messages=[
                     {"role": "system", "content": "You are an expert reading teacher creating focused, practical guided reading lessons."},
                     {"role": "user", "content": prompt}
                 ],
-                temperature=0.7,
+                temperature=API_SETTINGS["temperature"],
                 stream=True
             )
             
@@ -640,12 +641,12 @@ def generate_graphic_organizer():
         [etc...]"""
 
         response = client.chat.completions.create(
-            model="gpt-4o-mini",
+            model=ENDPOINT_MODELS["generate_graphic_organizer"],
             messages=[
                 {"role": "system", "content": "You are an expert at creating educational graphic organizers for reading comprehension."},
                 {"role": "user", "content": prompt}
             ],
-            temperature=0.7
+            temperature=API_SETTINGS["temperature"]
         )
         
         organizer_content = response.choices[0].message.content.strip()
@@ -712,12 +713,12 @@ def generate_exit_ticket():
             """
 
             response = client.chat.completions.create(
-                model="gpt-4o-mini",
+                model=ENDPOINT_MODELS["generate_exit_ticket"],
                 messages=[
                     {"role": "system", "content": "You are an expert at creating effective exit tickets that check student understanding of specific reading skills using practice stories."},
                     {"role": "user", "content": prompt}
                 ],
-                temperature=0.7,
+                temperature=API_SETTINGS["temperature"],
                 stream=True
             )
             
@@ -766,12 +767,12 @@ def generate_practice():
             """
 
             response = client.chat.completions.create(
-                model="gpt-4o-mini",
+                model=ENDPOINT_MODELS["generate_practice"],
                 messages=[
                     {"role": "system", "content": "You are an expert at creating educational content and practice activities."},
                     {"role": "user", "content": prompt}
                 ],
-                temperature=0.7,
+                temperature=API_SETTINGS["temperature"],
                 stream=True
             )
             
@@ -817,13 +818,13 @@ def improve_observation():
         """
 
         response = client.chat.completions.create(
-            model="gpt-4o-mini",
+            model=ENDPOINT_MODELS["improve_observation"],
             messages=[
                 {"role": "system", "content": "You are writing as the teacher, providing direct observations about students."},
                 {"role": "user", "content": prompt}
             ],
-            temperature=0.7,
-            max_tokens=150  # Limit the response length
+            temperature=API_SETTINGS["temperature"],
+            max_tokens=API_SETTINGS["max_tokens"]["improve_observation"]
         )
         
         improved_observation = response.choices[0].message.content.strip()
@@ -866,7 +867,7 @@ def chat():
             When relevant, provide specific examples and scenarios to illustrate your points."""
 
             response = client.chat.completions.create(
-                model="gpt-4o",
+                model=ENDPOINT_MODELS["chat"],
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": message}
@@ -894,7 +895,7 @@ def parse_students_from_image():
         
         # Use GPT to parse the text content
         response = client.chat.completions.create(
-            model="gpt-4o",
+            model=ENDPOINT_MODELS["parse_students_from_image"],
             messages=[
                 {
                     "role": "system",
@@ -1016,7 +1017,7 @@ def parse_students():
         
         # Call OpenAI API
         response = client.chat.completions.create(
-            model="gpt-4o",
+            model=ENDPOINT_MODELS["parse_students"],
             messages=[
                 {
                     "role": "system", 
