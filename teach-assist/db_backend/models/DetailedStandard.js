@@ -19,7 +19,7 @@ const DetailedStandardSchema = new mongoose.Schema({
     type: String,
     required: true
   },
-  grade: {
+  gradeLevel: {
     type: String,
     required: true
   },

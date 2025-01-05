@@ -11,7 +11,7 @@ router.get('/', isAuthenticated, async (req, res) => {
     const { gradeLevel } = req.query;
     console.log('Fetching detailed standards for grade level:', gradeLevel);
     
-    const query = gradeLevel ? { grade: gradeLevel } : {};
+    const query = gradeLevel ? { gradeLevel: gradeLevel } : {};
     console.log('Query:', query);
     
     const standards = await DetailedStandard.aggregate([
