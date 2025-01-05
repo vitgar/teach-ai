@@ -15,9 +15,11 @@ load_dotenv()
 app = Flask(__name__)
 CORS(app, resources={
     r"/*": {
-        "origins": ["http://localhost:3000"],
+        "origins": ["http://localhost:3000", "https://teach-ai-beige.vercel.app"],
         "methods": ["GET", "POST", "OPTIONS"],
-        "allow_headers": ["Content-Type", "Authorization"]
+        "allow_headers": ["Content-Type", "Authorization"],
+        "supports_credentials": True,
+        "max_age": 3600
     }
 })
 
@@ -274,7 +276,7 @@ Explanation: [Detailed explanation]
 
             # Generate the passage using OpenAI's API (assuming `client` is properly configured)
             response = client.chat.completions.create(
-                model="gpt-4o",  # Corrected model name
+                model="gpt-4o",  # Fixed model name
                 messages=[
                     {
                         "role": "system",
@@ -283,7 +285,8 @@ Explanation: [Detailed explanation]
                     {"role": "user", "content": prompt}
                 ],
                 temperature=0.7,
-                stream=True
+                stream=True,
+                timeout=60  # Add timeout
             )
 
             for chunk in response:
