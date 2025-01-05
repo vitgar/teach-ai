@@ -1,6 +1,7 @@
 # # main.py
 
-from fastapi import FastAPI, HTTPException, Header, Depends, StreamingResponse
+from fastapi import FastAPI, HTTPException, Header, Depends
+from starlette.responses import StreamingResponse
 from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
 from lesson_plan_generator import send_request_to_openai
