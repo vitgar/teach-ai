@@ -154,7 +154,7 @@ async def improve_intervention(request: ImproveInterventionRequest):
     try:
         client = OpenAI(api_key=openai_api_key)
         response = client.chat.completions.create(
-            model="gpt-4",
+            model="gpt-4o",
             messages=[
                 {
                     "role": "system",
@@ -282,7 +282,7 @@ async def chat(request: ChatRequest, token_payload: dict = Depends(verify_token)
         try:
             client = OpenAI(api_key=openai_api_key)
             response = client.chat.completions.create(
-                model="gpt-4",
+                model="gpt-4o",
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": f"{request.message}{context}"}
