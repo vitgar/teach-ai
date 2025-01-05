@@ -120,20 +120,6 @@ def generate_passage():
     question_style = data.get('questionStyle', 'STAAR')
     include_answer_key = data.get('includeAnswerKey', False)
 
-    def parse_lexile_level(level_str):
-        """
-        Returns the Lexile range for the given level string.
-        """
-        try:
-            # Get the specification for this level directly
-            spec = LEXILE_SPECIFICATIONS.get(level_str)
-            if spec:
-                return spec["range"]
-            return None
-        except Exception as e:
-            print(f"Error parsing Lexile level: {e}")
-            return None
-
     def generate():
         nonlocal reading_level
         try:
@@ -286,11 +272,11 @@ Explanation: [Detailed explanation]
                 messages=[
                     {
                         "role": "system",
-                        "content": [{"type": "text", "text": "You are an expert in creating Lexile-appropriate reading passages."}]
+                        "content": "You are an expert in creating Lexile-appropriate reading passages."
                     },
                     {
                         "role": "user",
-                        "content": [{"type": "text", "text": prompt}]
+                        "content": prompt
                     }
                 ],
                 temperature=API_SETTINGS["temperature"],
@@ -299,7 +285,7 @@ Explanation: [Detailed explanation]
             )
 
             for chunk in response:
-                if chunk.choices[0].delta.content:
+                if chunk.choices[0].delta.content is not None:
                     text = chunk.choices[0].delta.content
                     yield f"data: {json.dumps({'type': 'content', 'content': text})}\n\n"
 
@@ -403,7 +389,7 @@ def generate_worksheet():
             # Stream the response
             current_content = ""
             for chunk in response:
-                if chunk.choices[0].delta.content:
+                if chunk.choices[0].delta.content is not None:
                     content = chunk.choices[0].delta.content
                     current_content += content
                     yield json.dumps({
@@ -474,7 +460,7 @@ def generate_warmup():
             
             content = ""
             for chunk in response:
-                if chunk.choices[0].delta.content:
+                if chunk.choices[0].delta.content is not None:
                     content += chunk.choices[0].delta.content
                     yield f"data: {json.dumps({'content': chunk.choices[0].delta.content})}\n\n"
 
@@ -523,7 +509,7 @@ def generate_story():
             
             story_text = ""
             for chunk in story_response:
-                if chunk.choices[0].delta.content:
+                if chunk.choices[0].delta.content is not None:
                     story_text += chunk.choices[0].delta.content
                     yield f"data: {json.dumps({'type': 'story', 'content': chunk.choices[0].delta.content})}\n\n"
 
@@ -551,7 +537,7 @@ def generate_story():
             
             title = ""
             for chunk in title_response:
-                if chunk.choices[0].delta.content:
+                if chunk.choices[0].delta.content is not None:
                     title += chunk.choices[0].delta.content
                     yield f"data: {json.dumps({'type': 'title', 'content': chunk.choices[0].delta.content})}\n\n"
 
@@ -879,18 +865,18 @@ def chat():
                 messages=[
                     {
                         "role": "system",
-                        "content": [{"type": "text", "text": system_prompt}]
+                        "content": system_prompt
                     },
                     {
                         "role": "user",
-                        "content": [{"type": "text", "text": message}]
+                        "content": message
                     }
                 ],
                 stream=True
             )
             
             for chunk in response:
-                if chunk.choices[0].delta.content:
+                if chunk.choices[0].delta.content is not None:
                     yield chunk.choices[0].delta.content
 
         return Response(stream_with_context(generate()), mimetype='text/plain')
