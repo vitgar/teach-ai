@@ -9,6 +9,7 @@ import os
 from dotenv import load_dotenv
 from typing import List, Optional
 import jwt
+from openai import OpenAI
 
 # Load environment variables from a .env file
 load_dotenv()
@@ -151,8 +152,9 @@ async def improve_intervention(request: ImproveInterventionRequest):
     Improve the intervention text using OpenAI's GPT model.
     """
     try:
-        response = openai.ChatCompletion.create(
-            model="gpt-3.5-turbo",
+        client = OpenAI(api_key=openai_api_key)
+        response = client.chat.completions.create(
+            model="gpt-4",
             messages=[
                 {
                     "role": "system",
@@ -167,16 +169,12 @@ async def improve_intervention(request: ImproveInterventionRequest):
             max_tokens=150,
         )
 
-        improved_text = response.choices[0].message['content'].strip()
+        improved_text = response.choices[0].message.content.strip()
         return ImproveInterventionResponse(improved_text=improved_text)
 
-    except openai.error.OpenAIError as e:
+    except Exception as e:
         print(f"OpenAI API error: {e}")
         raise HTTPException(status_code=500, detail="Failed to improve intervention text.")
-
-    except Exception as e:
-        print(f"Unexpected error: {e}")
-        raise HTTPException(status_code=500, detail="An unexpected error occurred.")
 
 # Route to generate stories
 @app.post("/generate-story", response_model=GenerateStoryResponse)
@@ -282,10 +280,9 @@ async def chat(request: ChatRequest, token_payload: dict = Depends(verify_token)
         print(f"Sending request to OpenAI API with message: {request.message[:100]}...")
         
         try:
-            # Use the old OpenAI API format
-            openai.api_key = openai_api_key
-            response = openai.ChatCompletion.create(
-                model="gpt-3.5-turbo",
+            client = OpenAI(api_key=openai_api_key)
+            response = client.chat.completions.create(
+                model="gpt-4",
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": f"{request.message}{context}"}
@@ -299,22 +296,10 @@ async def chat(request: ChatRequest, token_payload: dict = Depends(verify_token)
             print(f"Error type: {type(api_error).__name__}")
             raise
 
-        chat_response = response.choices[0].message['content'].strip()
+        chat_response = response.choices[0].message.content.strip()
         print(f"Received response from OpenAI API: {chat_response[:100]}...")
         return ChatResponse(response=chat_response)
 
-    except openai.error.AuthenticationError as e:
-        print(f"OpenAI Authentication error details: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Authentication failed with OpenAI API: {str(e)}")
-    
-    except openai.error.RateLimitError as e:
-        print(f"OpenAI Rate limit error details: {str(e)}")
-        raise HTTPException(status_code=429, detail=f"Rate limit exceeded with OpenAI API: {str(e)}")
-    
-    except openai.error.OpenAIError as e:
-        print(f"OpenAI API error details: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"OpenAI API error: {str(e)}")
-    
     except Exception as e:
         print(f"Unexpected error in chat endpoint: {str(e)}")
         print(f"Error type: {type(e).__name__}")
