@@ -460,3 +460,124 @@ async def chat(request: ChatRequest, token_payload: dict = Depends(verify_token)
 @app.get("/health")
 async def health_check():
     return {"status": "healthy", "service": "TeachAssist AI API"}
+
+@app.post("/generate-practice")
+async def generate_practice(request: dict):
+    """
+    Generate a practice activity with a new story.
+    """
+    try:
+        prompt = f"""Create a practice activity with a new short story focusing on {request.get('skill')}.
+
+        Format the response in markdown:
+        ### Independent Practice Story: [Generate an engaging title]
+
+        [Write a short story here that demonstrates {request.get('skill')} - about 100 words]
+
+        **Practice Questions:**
+        1. [Question specifically about {request.get('skill')}]
+        2. [Another question about {request.get('skill')}]
+        3. [Final question about {request.get('skill')}]
+
+        **Student Instructions:**
+        1. Read the story carefully
+        2. Think about {request.get('skill')} as you read
+        3. Answer the questions using evidence from the text"""
+
+        try:
+            client = OpenAI(api_key=openai_api_key)
+            response = client.chat.completions.create(
+                model="gpt-4o",
+                messages=[
+                    {"role": "system", "content": "You are an expert at creating educational content and practice activities."},
+                    {"role": "user", "content": prompt}
+                ],
+                temperature=0.7,
+                stream=True
+            )
+            
+            async def generate():
+                practice_text = ""
+                for chunk in response:
+                    if chunk.choices[0].delta.content is not None:
+                        content = chunk.choices[0].delta.content
+                        practice_text += content
+                        yield f"data: {json.dumps({'content': content})}\n\n"
+                yield f"data: {json.dumps({'type': 'complete', 'content': practice_text})}\n\n"
+
+            return StreamingResponse(generate(), media_type='text/event-stream')
+
+        except Exception as api_error:
+            print(f"OpenAI API error: {str(api_error)}")
+            raise
+
+    except Exception as e:
+        print(f"Unexpected error: {e}")
+        raise HTTPException(status_code=500, detail="An unexpected error occurred.")
+
+@app.post("/generate-guided-reading-intro")
+async def generate_guided_reading_intro(request: dict):
+    """
+    Generate a guided reading introduction lesson.
+    """
+    try:
+        prompt = f"""Create a brief 5-minute guided reading introduction lesson for this story. 
+        The lesson should focus on teaching {request.get('skill')}.
+
+        Story Title: {request.get('title')}
+        Story Content: {request.get('content')}
+
+        Format the response in markdown:
+        ### 5-Minute Introduction Lesson: {request.get('skill')}
+
+        **Objective:**
+        [What students will learn about {request.get('skill')}]
+
+        **Introduction (1-2 minutes):**
+        - [How to introduce the concept]
+        - [Key points to emphasize]
+
+        **Modeling (2-3 minutes):**
+        1. [Step-by-step demonstration]
+        2. [Examples from the text]
+        3. [Think-aloud points]
+
+        **Guided Practice (1-2 minutes):**
+        - [How students will practice]
+        - [What to look for]
+
+        **Teacher Notes:**
+        - [Important reminders]
+        - [Common misconceptions]
+        - [Support strategies]"""
+
+        try:
+            client = OpenAI(api_key=openai_api_key)
+            response = client.chat.completions.create(
+                model="gpt-4o",
+                messages=[
+                    {"role": "system", "content": "You are an expert reading teacher creating focused, practical guided reading lessons."},
+                    {"role": "user", "content": prompt}
+                ],
+                temperature=0.7,
+                stream=True
+            )
+            
+            async def generate():
+                intro_text = ""
+                for chunk in response:
+                    if chunk.choices[0].delta.content is not None:
+                        content = chunk.choices[0].delta.content
+                        intro_text += content
+                        yield f"data: {json.dumps({'content': content})}\n\n"
+                yield f"data: {json.dumps({'type': 'complete', 'content': intro_text})}\n\n"
+
+            return StreamingResponse(generate(), media_type='text/event-stream')
+
+        except Exception as api_error:
+            print(f"OpenAI API error: {str(api_error)}")
+            raise
+
+    except Exception as e:
+        print(f"Unexpected error: {e}")
+        raise HTTPException(status_code=500, detail="An unexpected error occurred.")
