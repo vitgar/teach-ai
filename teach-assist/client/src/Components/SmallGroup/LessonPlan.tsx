@@ -985,9 +985,9 @@ const LessonPlan = () => {
                 const searchTerms = inputValue?.toLowerCase().split(' ') || [];
                 return options.filter(option => 
                   searchTerms.every(term => {
-                    const standard = option.standard?.toLowerCase() || '';
-                    const code = option.code?.toLowerCase() || '';
-                    const description = option.description?.toLowerCase() || '';
+                    const standard = String(option.standard || '').toLowerCase();
+                    const code = String(option.code || '').toLowerCase();
+                    const description = String(option.description || '').toLowerCase();
                     return standard.includes(term) || code.includes(term) || description.includes(term);
                   })
                 );
