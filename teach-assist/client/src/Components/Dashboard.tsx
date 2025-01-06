@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Grid, Box, Typography } from '@mui/material';
+import { Grid, Box, Typography, Skeleton } from '@mui/material';
 import PersonAddIcon from '@mui/icons-material/PersonAdd';
 import AssignmentIcon from '@mui/icons-material/Assignment';
 import GroupsIcon from '@mui/icons-material/Groups';
@@ -17,6 +17,7 @@ const Dashboard: React.FC = () => {
   const [hasStudents, setHasStudents] = useState(false);
   const [hasGroups, setHasGroups] = useState(false);
   const [hasLessonPlans, setHasLessonPlans] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   
   // Check if profile is complete
   const isProfileComplete = Boolean(
@@ -30,6 +31,7 @@ const Dashboard: React.FC = () => {
   useEffect(() => {
     const checkStudentsAndGroups = async () => {
       try {
+        setIsLoading(true);
         // Check for students
         const studentsResponse = await apiAxiosInstance.get('/api/students');
         setHasStudents(studentsResponse.data.length > 0);
@@ -43,6 +45,11 @@ const Dashboard: React.FC = () => {
         setHasLessonPlans(lessonPlansResponse.data.length > 0);
       } catch (error) {
         console.error('Error checking students and groups:', error);
+        setHasStudents(false);
+        setHasGroups(false);
+        setHasLessonPlans(false);
+      } finally {
+        setIsLoading(false);
       }
     };
 
@@ -73,34 +80,46 @@ const Dashboard: React.FC = () => {
         {/* Progress Status Cards */}
         <Grid item xs={12} md={6}>
           <Box onClick={() => navigate('/add-students')} sx={{ cursor: 'pointer' }}>
-            <StatusCard
-              title={hasStudents ? "Student(s)" : "Add Your First Student"}
-              description="Start by adding students to create and manage your teaching groups effectively."
-              icon={<PersonAddIcon />}
-              hasItems={hasStudents}
-            />
+            {isLoading ? (
+              <Skeleton variant="rectangular" height={120} sx={{ borderRadius: 2 }} />
+            ) : (
+              <StatusCard
+                title={hasStudents ? "Student(s)" : "Add Your First Student"}
+                description="Start by adding students to create and manage your teaching groups effectively."
+                icon={<PersonAddIcon />}
+                hasItems={hasStudents}
+              />
+            )}
           </Box>
         </Grid>
         
         <Grid item xs={12} md={6}>
           <Box onClick={() => navigate('/group-list')} sx={{ cursor: 'pointer' }}>
-            <StatusCard
-              title={hasGroups ? "Group(s)" : "Add Your First Group"}
-              description="Create groups to organize your students for different activities."
-              icon={<GroupAddIcon />}
-              hasItems={hasGroups}
-            />
+            {isLoading ? (
+              <Skeleton variant="rectangular" height={120} sx={{ borderRadius: 2 }} />
+            ) : (
+              <StatusCard
+                title={hasGroups ? "Group(s)" : "Add Your First Group"}
+                description="Create groups to organize your students for different activities."
+                icon={<GroupAddIcon />}
+                hasItems={hasGroups}
+              />
+            )}
           </Box>
         </Grid>
 
         <Grid item xs={12} md={6}>
           <Box onClick={() => navigate('/small-group/lesson-plan')} sx={{ cursor: 'pointer' }}>
-            <StatusCard
-              title={hasLessonPlans ? "Small Group Lesson Plan(s)" : "Create Your First Lesson Plan"}
-              description="Design engaging lesson plans tailored to your students' needs."
-              icon={<AssignmentIcon />}
-              hasItems={hasLessonPlans}
-            />
+            {isLoading ? (
+              <Skeleton variant="rectangular" height={120} sx={{ borderRadius: 2 }} />
+            ) : (
+              <StatusCard
+                title={hasLessonPlans ? "Small Group Lesson Plan(s)" : "Create Your First Lesson Plan"}
+                description="Design engaging lesson plans tailored to your students' needs."
+                icon={<AssignmentIcon />}
+                hasItems={hasLessonPlans}
+              />
+            )}
           </Box>
         </Grid>
       </Grid>
