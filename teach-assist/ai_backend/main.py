@@ -188,7 +188,7 @@ async def generate_story(request: GenerateStoryRequest):
         prompt = f"""Generate an engaging and age-appropriate story based on the following prompt:
         Topic: {request.prompt}
         
-        Follow this exact format with proper line spacing:
+        Format the response in clear markdown with proper spacing between sections:
         
         # [Story Title]
         
@@ -218,13 +218,15 @@ async def generate_story(request: GenerateStoryRequest):
                         "content": """You are an expert at creating engaging educational stories.
                         Follow these formatting rules exactly:
                         1. Start with a single # for the title
-                        2. Add a blank line after the title
+                        2. Add TWO blank lines after the title
                         3. Use ## for section headers
-                        4. Add a blank line after each section header
+                        4. Add TWO blank lines after each section header
                         5. Keep paragraphs short (3-4 sentences)
-                        6. Add a blank line between paragraphs
+                        6. Add TWO blank lines between paragraphs
                         7. Use descriptive language suitable for the target audience
-                        8. Do not include any placeholder text like [Story Title] - replace all placeholders with actual content"""
+                        8. Replace all placeholders with actual content
+                        9. Use proper markdown formatting
+                        10. Ensure consistent spacing throughout"""
                     },
                     {"role": "user", "content": prompt}
                 ],
@@ -238,10 +240,12 @@ async def generate_story(request: GenerateStoryRequest):
                     if chunk.choices[0].delta.content is not None:
                         content = chunk.choices[0].delta.content
                         story_text += content
+                        # Format the content as a proper SSE data message
                         yield f"data: {json.dumps({'content': content})}\n\n"
                 
-                # Send the complete story at the end for downloading
-                yield f"data: {json.dumps({'type': 'complete', 'content': story_text, 'downloadContent': story_text})}\n\n"
+                # Format the complete story with proper markdown
+                formatted_story = story_text.replace("\n\n\n", "\n\n").strip()
+                yield f"data: {json.dumps({'type': 'complete', 'content': formatted_story, 'downloadContent': formatted_story})}\n\n"
 
             return StreamingResponse(generate(), media_type='text/event-stream')
 
