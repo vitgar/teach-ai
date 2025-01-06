@@ -185,55 +185,45 @@ async def generate_story(request: GenerateStoryRequest):
     Generate a story using OpenAI's GPT model.
     """
     try:
-        prompt = f"""Generate an engaging and age-appropriate story based on the following prompt:
+        prompt = f"""Generate a very short, engaging story based on the following prompt:
         Topic: {request.prompt}
         
-        Format the response in clear markdown with proper spacing between sections:
+        Requirements:
+        1. Create a single paragraph story (about 100-150 words)
+        2. Make it engaging and age-appropriate
+        3. Include a clear beginning, middle, and end
+        4. Focus on {request.prompt} without explicitly mentioning it
+        5. Use vocabulary appropriate for the target audience
+        6. Keep it concise but meaningful
         
-        # [Story Title]
+        Format:
+        [Title]
         
-        ## Introduction
-        
-        [One clear, engaging paragraph introducing the setting and main characters]
-        
-        ## Main Story
-        
-        [First main paragraph developing the story's beginning]
-        
-        [Second paragraph showing the middle/conflict of the story]
-        
-        [Third paragraph building to the story's climax]
-        
-        ## Conclusion
-        
-        [Final paragraph wrapping up the story with a clear resolution and message]"""
+        [Single paragraph story]"""
         
         try:
             client = OpenAI(api_key=openai_api_key)
             response = client.chat.completions.create(
-                model="gpt-4o",
+                model="gpt-4",
                 messages=[
                     {
                         "role": "system", 
                         "content": """You are an expert at creating engaging educational stories.
-                        Follow these formatting rules exactly:
-                        1. Start with a single # for the title
+                        Follow these rules exactly:
+                        1. Generate a short, creative title
                         2. Add TWO blank lines after the title
-                        3. Use ## for section headers
-                        4. Add TWO blank lines after each section header
-                        5. Keep paragraphs short (3-4 sentences)
-                        6. Add TWO blank lines between paragraphs
-                        7. Use descriptive language suitable for the target audience
-                        8. Replace all placeholders with actual content
-                        9. Use proper markdown formatting
-                        10. Ensure consistent spacing throughout"""
+                        3. Write a single engaging paragraph
+                        4. Keep the story concise (100-150 words)
+                        5. Use descriptive language suitable for the target audience
+                        6. Do not use any markdown headers or formatting
+                        7. Make sure the story has a clear beginning, middle, and end"""
                     },
                     {"role": "user", "content": prompt}
                 ],
                 temperature=0.7,
                 stream=True
             )
-            
+
             async def generate():
                 story_text = ""
                 for chunk in response:
@@ -243,9 +233,13 @@ async def generate_story(request: GenerateStoryRequest):
                         # Format the content as a proper SSE data message
                         yield f"data: {json.dumps({'content': content})}\n\n"
                 
-                # Format the complete story with proper markdown
-                formatted_story = story_text.replace("\n\n\n", "\n\n").strip()
-                yield f"data: {json.dumps({'type': 'complete', 'content': formatted_story, 'downloadContent': formatted_story})}\n\n"
+                # Split the story text into title and content
+                parts = story_text.strip().split('\n\n', 1)
+                if len(parts) == 2:
+                    title, content = parts
+                    yield f"data: {json.dumps({'type': 'complete', 'title': title.strip(), 'content': content.strip()})}\n\n"
+                else:
+                    yield f"data: {json.dumps({'type': 'error', 'message': 'Failed to generate properly formatted story'})}\n\n"
 
             return StreamingResponse(generate(), media_type='text/event-stream')
 

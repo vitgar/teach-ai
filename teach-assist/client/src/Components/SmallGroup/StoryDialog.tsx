@@ -16,7 +16,8 @@ import PrintIcon from '@mui/icons-material/Print';
 import DownloadIcon from '@mui/icons-material/Download';
 import PictureAsPdfIcon from '@mui/icons-material/PictureAsPdf';
 import DescriptionIcon from '@mui/icons-material/Description';
-import html2pdf from 'html2pdf.js';
+// @ts-ignore
+import html2pdf from 'html2pdf.js/dist/html2pdf.bundle.min.js';
 
 interface StoryDialogProps {
   open: boolean;
@@ -123,7 +124,11 @@ const StoryDialog: React.FC<StoryDialogProps> = ({ open, onClose, title, content
     };
 
     try {
-      await html2pdf().set(opt).from(element).save();
+      const worker = html2pdf();
+      await worker
+        .set(opt)
+        .from(element)
+        .save();
     } catch (error) {
       console.error('Error generating PDF:', error);
     }
@@ -153,6 +158,7 @@ const StoryDialog: React.FC<StoryDialogProps> = ({ open, onClose, title, content
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
+      URL.revokeObjectURL(link.href);
     } catch (error) {
       console.error('Error generating Word document:', error);
     }
