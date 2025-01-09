@@ -5,7 +5,6 @@ import {
   FormControl, 
   InputLabel, 
   Select, 
-  MenuItem, 
   Checkbox, 
   ListItemText,
   OutlinedInput,
@@ -32,6 +31,13 @@ import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
 import SaveIcon from '@mui/icons-material/Save';
 import FeedbackButton from '../Common/FeedbackButton';
+import PrintIcon from '@mui/icons-material/Print';
+import DownloadIcon from '@mui/icons-material/Download';
+import PictureAsPdfIcon from '@mui/icons-material/PictureAsPdf';
+import DescriptionIcon from '@mui/icons-material/Description';
+import Menu from '@mui/material/Menu';
+import MenuItem from '@mui/material/MenuItem';
+import html2pdf from 'html2pdf.js';
 
 interface Group {
   _id: string;
@@ -241,6 +247,7 @@ const LessonPlan = () => {
     guidedPractice: '',
     writingComprehension: ''
   });
+  const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
 
   // Mapping origin to group type
   const originTypeMap: { [key: string]: string } = {
@@ -796,6 +803,313 @@ const LessonPlan = () => {
     }
   };
 
+  const formatHtmlContent = (content: string) => {
+    return content
+      .replace(/\*\*/g, '') // Remove bold markers
+      .replace(/\*/g, '')   // Remove italic markers
+      .replace(/#{1,6}\s/g, '') // Remove heading markers
+      .replace(/`/g, '')    // Remove code markers
+      .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1') // Replace links with just text
+      .replace(/\n\n/g, '</p><p>') // Convert double newlines to paragraphs
+      .replace(/\n/g, '<br>') // Convert single newlines to line breaks
+      .trim();
+  };
+
+  const formatMarkdownContent = (content: string) => {
+    return content
+      .replace(/\*\*/g, '') // Remove bold markers
+      .replace(/\*/g, '')   // Remove italic markers
+      .replace(/#{1,6}\s/g, '') // Remove heading markers
+      .replace(/`/g, '')    // Remove code markers
+      .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1') // Replace links with just text
+      .replace(/\n\n/g, '\\par\\par ') // Convert double newlines to RTF paragraphs
+      .replace(/\n/g, '\\line ') // Convert single newlines to RTF line breaks
+      .replace(/\s+/g, ' ') // Normalize spaces
+      .trim();
+  };
+
+  const handlePrint = () => {
+    if (!story || !lessonContent) return;
+    
+    const printWindow = window.open('', '_blank');
+    if (printWindow) {
+      printWindow.document.write(`
+        <html>
+          <head>
+            <title>Lesson Plan - ${story.title}</title>
+            <style>
+              @page {
+                margin: 1in;
+                size: letter;
+              }
+              
+              @media print {
+                @page {
+                  margin: 1in;
+                  size: letter;
+                }
+              }
+
+              body {
+                font-family: Arial, sans-serif;
+                line-height: 1.6;
+                padding: 20px;
+                max-width: 800px;
+                margin: 0 auto;
+              }
+
+              h1, h2 {
+                color: #1976d2;
+                margin-top: 2em;
+                margin-bottom: 1em;
+              }
+
+              .story-content {
+                background-color: #f5f5f5;
+                padding: 1em;
+                margin: 1em 0;
+                border-radius: 4px;
+                white-space: pre-wrap;
+                word-wrap: break-word;
+              }
+
+              .section {
+                margin-bottom: 2em;
+                page-break-inside: avoid;
+              }
+
+              .section-content {
+                white-space: pre-wrap;
+                word-wrap: break-word;
+              }
+
+              p {
+                margin: 1em 0;
+              }
+            </style>
+          </head>
+          <body>
+            <h1>Lesson Plan: ${story.title}</h1>
+            ${selectedStandard ? `
+              <div style="margin-bottom: 2em;">
+                <strong>Standard:</strong> ${standards.find(s => s._id === selectedStandard)?.code || ''}
+                ${standards.find(s => s._id === selectedStandard)?.description ? 
+                  `<br><em>${standards.find(s => s._id === selectedStandard)?.description}</em>` : ''}
+              </div>
+            ` : ''}
+
+            <div class="section">
+              <h2>Story: ${story.title}</h2>
+              <div class="story-content">${story.content}</div>
+            </div>
+
+            <div class="section">
+              <h2>Warm Up</h2>
+              <div class="section-content"><p>${formatHtmlContent(lessonContent.warmUp)}</p></div>
+            </div>
+
+            <div class="section">
+              <h2>Introduction and Guided Practice</h2>
+              <div class="section-content"><p>${formatHtmlContent(lessonContent.introduction)}</p></div>
+            </div>
+
+            <div class="section">
+              <h2>Independent Practice</h2>
+              <div class="section-content"><p>${formatHtmlContent(lessonContent.guidedPractice)}</p></div>
+            </div>
+
+            <div class="section">
+              <h2>Checking Comprehension</h2>
+              <div class="section-content"><p>${formatHtmlContent(lessonContent.writingComprehension)}</p></div>
+            </div>
+          </body>
+        </html>
+      `);
+      printWindow.document.close();
+      setTimeout(() => printWindow.print(), 250);
+    }
+  };
+
+  const handleDownloadClick = (event: React.MouseEvent<HTMLElement>) => {
+    setAnchorEl(event.currentTarget);
+  };
+
+  const handleDownloadClose = () => {
+    setAnchorEl(null);
+  };
+
+  const handleDownloadPDF = async () => {
+    if (!story || !lessonContent) return;
+    
+    handleDownloadClose();
+    const element = document.createElement('div');
+    element.innerHTML = `
+      <div style="font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px;">
+        <style>
+          @media print {
+            * {
+              -webkit-print-color-adjust: exact !important;
+              color-adjust: exact !important;
+            }
+            .section {
+              page-break-inside: avoid !important;
+              break-inside: avoid !important;
+              display: block;
+              position: relative;
+              margin: 15px 0;
+            }
+            h2 {
+              page-break-after: avoid !important;
+              break-after: avoid !important;
+              margin: 0 0 10px 0 !important;
+              padding: 0 !important;
+            }
+            .content-wrapper {
+              page-break-before: avoid !important;
+              break-before: avoid !important;
+              page-break-inside: avoid !important;
+              break-inside: avoid !important;
+            }
+            .content {
+              page-break-before: avoid !important;
+              break-before: avoid !important;
+              white-space: pre-wrap;
+              word-wrap: break-word;
+              line-height: 1.6;
+            }
+            p {
+              orphans: 3;
+              widows: 3;
+              margin: 0 0 10px 0;
+            }
+          }
+        </style>
+        <h1 style="color: #1976d2; margin: 0 0 20px 0;">Lesson Plan: ${story.title}</h1>
+        ${selectedStandard ? `
+          <div style="margin: 0 0 20px 0;">
+            <strong>Standard:</strong> ${standards.find(s => s._id === selectedStandard)?.code || ''}
+            ${standards.find(s => s._id === selectedStandard)?.description ? 
+              `<br><em>${standards.find(s => s._id === selectedStandard)?.description}</em>` : ''}
+          </div>
+        ` : ''}
+
+        <div class="section">
+          <h2 style="color: #1976d2;">Story: ${story.title}</h2>
+          <div class="content-wrapper">
+            <div class="content" style="background-color: #f5f5f5; padding: 15px; border-radius: 4px;">
+              ${story.content}
+            </div>
+          </div>
+        </div>
+
+        <div class="section">
+          <h2 style="color: #1976d2;">Warm Up</h2>
+          <div class="content-wrapper">
+            <div class="content">${formatHtmlContent(lessonContent.warmUp)}</div>
+          </div>
+        </div>
+
+        <div class="section">
+          <h2 style="color: #1976d2;">Introduction and Guided Practice</h2>
+          <div class="content-wrapper">
+            <div class="content">${formatHtmlContent(lessonContent.introduction)}</div>
+          </div>
+        </div>
+
+        <div class="section">
+          <h2 style="color: #1976d2;">Independent Practice</h2>
+          <div class="content-wrapper">
+            <div class="content">${formatHtmlContent(lessonContent.guidedPractice)}</div>
+          </div>
+        </div>
+
+        <div class="section">
+          <h2 style="color: #1976d2;">Checking Comprehension</h2>
+          <div class="content-wrapper">
+            <div class="content">${formatHtmlContent(lessonContent.writingComprehension)}</div>
+          </div>
+        </div>
+      </div>
+    `;
+
+    const opt = {
+      margin: 0.75,
+      filename: `lesson-plan-${story.title}.pdf`,
+      image: { type: 'jpeg', quality: 0.98 },
+      html2canvas: { 
+        scale: 2,
+        useCORS: true,
+        letterRendering: true
+      },
+      jsPDF: { 
+        unit: 'in', 
+        format: 'letter', 
+        orientation: 'portrait',
+        compress: true
+      },
+      pagebreak: { 
+        mode: ['avoid-all'],
+        before: '.section',
+        avoid: ['h2', '.content-wrapper', '.content']
+      }
+    };
+
+    try {
+      await html2pdf().set(opt).from(element).save();
+    } catch (error) {
+      console.error('Error generating PDF:', error);
+      setError('Failed to generate PDF');
+    }
+  };
+
+  const handleDownloadWord = () => {
+    if (!story || !lessonContent) return;
+    
+    handleDownloadClose();
+    try {
+      let rtfContent = `{\\rtf1\\ansi\\deff0
+{\\fonttbl{\\f0\\fnil\\fcharset0 Arial;}}
+{\\colortbl;\\red25\\green118\\blue210;}
+
+\\paperw12240\\paperh15840\\margl1440\\margr1440\\margt1440\\margb1440
+\\widowctrl\\ftnbj\\aenddoc\\wrapdefault\\adjustright
+
+\\pard\\qc\\b\\fs36 Lesson Plan: ${story.title}\\par
+${selectedStandard ? `
+  \\pard\\sa360\\fs24\\b Standard: ${standards.find(s => s._id === selectedStandard)?.code || ''}
+  ${standards.find(s => s._id === selectedStandard)?.description ? 
+    `<br><em>${standards.find(s => s._id === selectedStandard)?.description}</em>` : ''}
+` : ''}
+
+\\pard\\qc\\b\\fs32 Story: ${story.title}\\par
+\\pard\\sa360\\fs24\\b0\\sl480\\slmult1 ${story.content}\\par
+
+\\pard\\qc\\b\\fs32 Warm Up\\par
+\\pard\\sa360\\fs24\\b0\\sl480\\slmult1 ${formatMarkdownContent(lessonContent.warmUp)}\\par
+
+\\pard\\qc\\b\\fs32 Introduction and Guided Practice\\par
+\\pard\\sa360\\fs24\\b0\\sl480\\slmult1 ${formatMarkdownContent(lessonContent.introduction)}\\par
+
+\\pard\\qc\\b\\fs32 Independent Practice\\par
+\\pard\\sa360\\fs24\\b0\\sl480\\slmult1 ${formatMarkdownContent(lessonContent.guidedPractice)}\\par
+
+\\pard\\qc\\b\\fs32 Checking Comprehension\\par
+\\pard\\sa360\\fs24\\b0\\sl480\\slmult1 ${formatMarkdownContent(lessonContent.writingComprehension)}\\par
+}`;
+
+      const blob = new Blob([rtfContent], { type: 'application/msword' });
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = `lesson-plan-${story.title}.doc`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch (error) {
+      console.error('Error generating Word document:', error);
+      setError('Failed to generate Word document');
+    }
+  };
+
   if (loading) {
     return (
       <Box display="flex" justifyContent="center" alignItems="center" minHeight="400px">
@@ -982,16 +1296,67 @@ const LessonPlan = () => {
             {isGeneratingStory ? 'Generating...' : 'Generate Lesson Plan'}
           </Button>
 
-          <Button
-            variant="contained"
-            color="secondary"
-            onClick={handleSaveLessonPlan}
-            disabled={!story || !selectedStandard || !lexileLevel || isSaving}
-            startIcon={isSaving ? <CircularProgress size={20} /> : <SaveIcon />}
-            sx={{ height: '48px' }}
-          >
-            {isSaving ? 'Saving...' : currentLessonPlanId ? 'Update Lesson Plan' : 'Save Lesson Plan'}
-          </Button>
+          {/* Only show these buttons when all sections are complete */}
+          {story && 
+           lessonContent.warmUp && 
+           lessonContent.introduction && 
+           lessonContent.guidedPractice && 
+           lessonContent.writingComprehension &&
+           lessonContent.writingComprehension !== 'Generating...' && (
+            <>
+              <Button
+                variant="contained"
+                color="secondary"
+                onClick={handleSaveLessonPlan}
+                disabled={isSaving}
+                startIcon={isSaving ? <CircularProgress size={20} /> : <SaveIcon />}
+                sx={{ height: '48px' }}
+              >
+                {isSaving ? 'Saving...' : currentLessonPlanId ? 'Update Lesson Plan' : 'Save Lesson Plan'}
+              </Button>
+
+              <Button
+                variant="contained"
+                startIcon={<PrintIcon />}
+                onClick={handlePrint}
+                sx={{ height: '48px' }}
+              >
+                Print
+              </Button>
+              
+              <Button
+                variant="contained"
+                startIcon={<DownloadIcon />}
+                onClick={handleDownloadClick}
+                sx={{ height: '48px' }}
+              >
+                Download
+              </Button>
+
+              <Menu
+                anchorEl={anchorEl}
+                open={Boolean(anchorEl)}
+                onClose={handleDownloadClose}
+                anchorOrigin={{
+                  vertical: 'bottom',
+                  horizontal: 'right',
+                }}
+                transformOrigin={{
+                  vertical: 'top',
+                  horizontal: 'right',
+                }}
+              >
+                <MenuItem onClick={handleDownloadPDF}>
+                  <PictureAsPdfIcon sx={{ mr: 1 }} />
+                  PDF
+                </MenuItem>
+                <MenuItem onClick={handleDownloadWord}>
+                  <DescriptionIcon sx={{ mr: 1 }} />
+                  Word
+                </MenuItem>
+              </Menu>
+            </>
+          )}
         </Box>
 
         {/* Content sections */}

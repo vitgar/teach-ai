@@ -167,6 +167,7 @@ class ImproveInterventionResponse(BaseModel):
 
 class GenerateStoryRequest(BaseModel):
     prompt: str
+    lexileLevel: str
 
 class GenerateStoryResponse(BaseModel):
     story: str
@@ -498,21 +499,72 @@ async def generate_story(request: GenerateStoryRequest):
     Generate a story using OpenAI's GPT model.
     """
     try:
+        # Get word count and paragraphs based on lexile level
+        lexile = request.lexileLevel.replace('L', '').upper()  # Convert '200L' to '200'
+        
+        # Default values for unknown lexile levels
+        word_count = "100-150"
+        paragraphs = "1-2"
+        level = "Intermediate"
+        
+        # Map lexile levels to parameters
+        if lexile == "BR":
+            word_count = "20-30"
+            paragraphs = "1"
+            level = "Beginning Reader"
+        elif lexile == "200":
+            word_count = "30-50"
+            paragraphs = "1"
+            level = "Early Reader"
+        elif lexile == "300":
+            word_count = "50-70"
+            paragraphs = "1"
+            level = "Early Reader"
+        elif lexile == "400":
+            word_count = "70-90"
+            paragraphs = "1-2"
+            level = "Early Intermediate"
+        elif lexile == "500":
+            word_count = "90-110"
+            paragraphs = "1-2"
+            level = "Intermediate"
+        elif lexile == "600":
+            word_count = "110-130"
+            paragraphs = "1-2"
+            level = "Intermediate"
+        elif lexile == "700":
+            word_count = "130-150"
+            paragraphs = "1-2"
+            level = "Advanced"
+        elif lexile == "800":
+            word_count = "150-170"
+            paragraphs = "1-2"
+            level = "Advanced"
+        elif lexile == "900":
+            word_count = "170-190"
+            paragraphs = "1-2"
+            level = "Advanced"
+        elif lexile == "1000":
+            word_count = "190-200"
+            paragraphs = "1-2"
+            level = "Advanced"
+
         prompt = f"""Generate a very short, engaging story based on the following prompt:
         Topic: {request.prompt}
         
         Requirements:
-        1. Create a single paragraph story (about 100-150 words)
-        2. Make it engaging and age-appropriate
+        1. Create {paragraphs} paragraph(s) with a total of {word_count} words
+        2. Make it engaging and age-appropriate for {level} level
         3. Include a clear beginning, middle, and end
         4. Focus on {request.prompt} without explicitly mentioning it
-        5. Use vocabulary appropriate for the target audience
+        5. Use vocabulary appropriate for {level} level
         6. Keep it concise but meaningful
+        7. Create a short, creative title that captures the main idea
         
         Format:
         [Title]
         
-        [Single paragraph story]"""
+        [Story content in {paragraphs} paragraph(s)]"""
         
         try:
             client = OpenAI(api_key=openai_api_key)
@@ -521,13 +573,13 @@ async def generate_story(request: GenerateStoryRequest):
                 messages=[
                     {
                         "role": "system", 
-                        "content": """You are an expert at creating engaging educational stories.
+                        "content": f"""You are an expert at creating engaging educational stories at specific reading levels.
                         Follow these rules exactly:
                         1. Generate a short, creative title
                         2. Add TWO blank lines after the title
-                        3. Write a single engaging paragraph
-                        4. Keep the story concise (100-150 words)
-                        5. Use descriptive language suitable for the target audience
+                        3. Write {paragraphs} paragraph(s)
+                        4. Total word count should be {word_count} words
+                        5. Use vocabulary suitable for {level} level
                         6. Do not use any markdown headers or formatting
                         7. Make sure the story has a clear beginning, middle, and end"""
                     },
@@ -648,7 +700,7 @@ async def generate_warmup(request: GenerateWarmupRequest):
     """
     async def generate():
         try:
-            prompt = f"""Create a brief 2-3 minute warm-up activity to prepare students for reading about {request.topic}.
+            prompt = f"""Create a focused 2-3 minute warm-up activity to prepare students for reading about {request.topic}.
 
             Story Title: {request.storyTitle}
             Story Content: {request.storyContent}
@@ -659,24 +711,29 @@ async def generate_warmup(request: GenerateWarmupRequest):
 
             **Time:** 2-3 minutes
 
-            **Objective:**
-            [Brief statement of what students will do]
+            **Learning Target:**
+            [Clear, measurable objective aligned with {request.topic}]
 
             **Activity Steps:**
-            1. [First step]
-            2. [Second step]
-            3. [Third step]
+            1. [Engaging opening aligned with reading level]
+            2. [Scaffolded practice of the skill]
+            3. [Quick formative check]
 
             **Teacher Notes:**
-            - [Important points to remember]
-            - [What to look for]
+            - [Key vocabulary to pre-teach]
+            - [Potential misconceptions to address]
+            - [Differentiation suggestions]
+            - [Success criteria for the warm-up]
             """
 
             client = OpenAI(api_key=openai_api_key)
             response = client.chat.completions.create(
                 model="gpt-4",
                 messages=[
-                    {"role": "system", "content": "You are an expert at creating engaging warm-up activities for reading lessons."},
+                    {
+                        "role": "system", 
+                        "content": "You are an expert reading teacher creating focused, standards-aligned warm-up activities. Ensure activities are engaging, grade-appropriate, and directly prepare students for the lesson objective."
+                    },
                     {"role": "user", "content": prompt}
                 ],
                 temperature=0.7,
@@ -774,28 +831,43 @@ async def generate_practice(request: GeneratePracticeRequest):
     try:
         async def generate():
             try:
-                # Construct the prompt
-                base_prompt = f"""Create a practice activity with a new short story focusing on {request.skill}.
+                base_prompt = f"""Create a focused independent practice activity that reinforces {request.skill}.
 
                 Format the response in markdown:
-                ### Independent Practice Story: [Generate an engaging title for the story]
+                ### Independent Practice: {request.skill}
 
-                [Write a short story here that demonstrates {request.skill} - about 100 words]
+                **Learning Target:**
+                [Clear, measurable objective for {request.skill}]
 
-                **Practice Questions:**
-                1. [Question specifically about {request.skill}]
-                2. [Another question about {request.skill}]
-                3. [Final question about {request.skill}]
+                **Practice Story:**
+                [Write a short story that provides multiple opportunities to practice {request.skill}]
+
+                **Guided Questions:**
+                1. [Question that directly assesses {request.skill}]
+                2. [Question requiring text evidence]
+                3. [Higher-order thinking question]
 
                 **Student Instructions:**
-                1. Read the story carefully
-                2. Think about {request.skill} as you read
-                3. Answer the questions using evidence from the text
+                1. Read the story independently
+                2. Use the following strategy for {request.skill}:
+                   - [Step-by-step process]
+                   - [What to look for]
+                   - [How to analyze]
+                3. Answer questions using text evidence
+
+                **Success Criteria:**
+                - [Specific expectations for responses]
+                - [How to demonstrate skill mastery]
+                - [Quality of text evidence needed]
+
+                **Teacher Notes:**
+                - [What to look for in student work]
+                - [Common misconceptions to address]
+                - [Differentiation suggestions]
                 """
 
-                # Add custom prompt if provided
                 if request.customPrompt:
-                    base_prompt += f"\nAdditional Instructions: {request.customPrompt}"
+                    base_prompt += f"\nAdditional Requirements: {request.customPrompt}"
 
                 client = OpenAI(api_key=openai_api_key)
                 response = client.chat.completions.create(
@@ -803,7 +875,7 @@ async def generate_practice(request: GeneratePracticeRequest):
                     messages=[
                         {
                             "role": "system",
-                            "content": "You are an expert at creating educational content and practice activities."
+                            "content": "You are an expert at creating standards-aligned independent practice activities. Ensure clear instructions, appropriate scaffolding, and meaningful assessment opportunities."
                         },
                         {
                             "role": "user",
@@ -823,7 +895,7 @@ async def generate_practice(request: GeneratePracticeRequest):
             except Exception as e:
                 print(f"Error during streaming: {str(e)}")
                 yield f"data: {json.dumps({'type': 'error', 'message': 'Failed to generate practice content'})}\n\n"
-        
+
         return StreamingResponse(generate(), media_type='text/event-stream')
         
     except Exception as e:
@@ -838,20 +910,44 @@ async def generate_guided_reading_intro(request: GenerateGuidedReadingIntroReque
     try:
         async def generate():
             try:
-                # Construct the prompt
-                base_prompt = f"""Create a brief 5-minute guided reading introduction lesson for this story. 
-                The lesson should focus on teaching {request.skill}.
+                base_prompt = f"""Create a focused 5-minute guided reading introduction lesson that explicitly teaches {request.skill}.
 
                 Story Title: {request.title}
                 Story Content: {request.content}
+                Teaching Focus: {request.skill}
 
                 Format the response in markdown:
                 ### 5-Minute Introduction Lesson: {request.skill}
+
+                **Learning Target:**
+                [Clear, measurable objective for {request.skill}]
+
+                **Key Vocabulary:**
+                - [Essential terms for understanding the skill]
+                - [Words from the text that support the skill]
+
+                **Direct Instruction (2 minutes):**
+                1. [Clear explanation of {request.skill}]
+                2. [Teacher modeling with think-aloud]
+                3. [Visual support or anchor chart details]
+
+                **Guided Practice (3 minutes):**
+                1. [Scaffolded practice with the skill]
+                2. [Text-specific examples to analyze]
+                3. [Check for understanding]
+
+                **Success Criteria:**
+                - [What students should be able to do]
+                - [How they'll demonstrate understanding]
+
+                **Teacher Notes:**
+                - [Common misconceptions]
+                - [Differentiation strategies]
+                - [Key points to emphasize]
                 """
 
-                # Add custom prompt if provided
                 if request.customPrompt:
-                    base_prompt += f"\nAdditional Instructions: {request.customPrompt}"
+                    base_prompt += f"\nAdditional Requirements: {request.customPrompt}"
 
                 client = OpenAI(api_key=openai_api_key)
                 response = client.chat.completions.create(
@@ -859,7 +955,7 @@ async def generate_guided_reading_intro(request: GenerateGuidedReadingIntroReque
                     messages=[
                         {
                             "role": "system",
-                            "content": "You are an expert reading teacher creating focused, practical guided reading lessons."
+                            "content": "You are an expert reading teacher creating focused, standards-aligned guided reading lessons. Ensure explicit instruction of reading skills with clear modeling and guided practice opportunities."
                         },
                         {
                             "role": "user",
@@ -879,7 +975,7 @@ async def generate_guided_reading_intro(request: GenerateGuidedReadingIntroReque
             except Exception as e:
                 print(f"Error during streaming: {str(e)}")
                 yield f"data: {json.dumps({'type': 'error', 'message': 'Failed to generate lesson introduction'})}\n\n"
-        
+
         return StreamingResponse(generate(), media_type='text/event-stream')
         
     except Exception as e:
@@ -911,36 +1007,38 @@ async def generate_exit_ticket(request: GenerateExitTicketRequest):
                             practice_story += line.strip() + ' '
                             in_story = True
 
-                # Construct the prompt
-                base_prompt = f"""Create a quick 2-minute exit ticket activity based on the Independent Practice story that checks students' understanding of {request.skill}.
+                base_prompt = f"""Create a focused 2-minute exit ticket that assesses student mastery of {request.skill}.
 
                 Practice Story Title: {practice_title}
                 Practice Story Content: {practice_story}
 
                 Format the response in markdown:
-                ### 2-Minute Exit Ticket: Checking Understanding
+                ### Exit Ticket: Demonstrating {request.skill}
 
-                **Time:** 2 minutes
+                **Learning Target:**
+                [Clear, measurable objective for {request.skill}]
 
-                **Task:**
-                Based on the story "{practice_title}", complete the following:
-                [Brief task description focusing on {request.skill}]
+                **Quick Assessment Task:**
+                [Brief, focused task that demonstrates mastery of {request.skill}]
 
-                **Instructions for Students:**
-                1. [First step specifically about the practice story]
-                2. [Second step using examples from the practice story]
+                **Student Instructions:**
+                1. [Clear step-by-step directions]
+                2. [How to show understanding]
+                3. [Time management suggestion]
 
                 **Success Criteria:**
-                - [What students need to demonstrate about {request.skill} using the practice story]
-                - [How they should use specific examples from the practice story]
-                
-                **Teacher Note:**
-                [What to look for in student responses regarding {request.skill} and their understanding of the practice story]
+                - [Specific expectations for mastery]
+                - [Required text evidence]
+                - [Quality indicators]
+
+                **Teacher Evaluation Guide:**
+                - [What mastery looks like]
+                - [Common misconceptions to watch for]
+                - [Next steps based on responses]
                 """
 
-                # Add custom prompt if provided
                 if request.customPrompt:
-                    base_prompt += f"\nAdditional Instructions: {request.customPrompt}"
+                    base_prompt += f"\nAdditional Requirements: {request.customPrompt}"
 
                 client = OpenAI(api_key=openai_api_key)
                 response = client.chat.completions.create(
@@ -948,7 +1046,7 @@ async def generate_exit_ticket(request: GenerateExitTicketRequest):
                     messages=[
                         {
                             "role": "system",
-                            "content": "You are an expert at creating effective exit tickets that check student understanding of specific reading skills using practice stories."
+                            "content": "You are an expert at creating focused exit tickets that effectively assess student mastery of reading skills. Ensure clear success criteria and meaningful evaluation opportunities."
                         },
                         {
                             "role": "user",
