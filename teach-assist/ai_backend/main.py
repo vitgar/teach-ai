@@ -1,7 +1,7 @@
 # # main.py
 
-from fastapi import FastAPI, HTTPException, Header, Depends
-from starlette.responses import StreamingResponse
+from fastapi import FastAPI, HTTPException, Header, Depends, Request
+from starlette.responses import StreamingResponse, JSONResponse
 from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
 from lesson_plan_generator import send_request_to_openai
@@ -12,6 +12,7 @@ from typing import List, Optional
 import jwt
 from openai import OpenAI
 import json
+import logging
 
 # Load environment variables from a .env file
 load_dotenv()
@@ -29,6 +30,82 @@ if not openai_api_key:
 # JWT configuration
 JWT_SECRET = os.environ.get("JWT_SECRET", "hPp0DlBqrAylk1TB1g/a7hM2jFeVkxfEQgFnJ4NXb2Ul5QWJ1gpV2F/PFdspKd2IudfDnyI9gfGHFGhH9A==")
 print(f"JWT_SECRET status: {'Configured' if JWT_SECRET != 'your-secret-key' else 'Using default'}")
+
+# Lexile level specifications
+LEXILE_SPECIFICATIONS = {
+    "BR": {
+        "category": "elementary",
+        "paragraphs": 2,
+        "word_count": "25 to 50 words",
+        "range": "0L to 200L"
+    },
+    "0-200": {
+        "category": "elementary",
+        "paragraphs": 2,
+        "word_count": "25 to 50 words",
+        "range": "0L to 200L"
+    },
+    "200-300": {
+        "category": "elementary",
+        "paragraphs": 2,
+        "word_count": "40 to 70 words",
+        "range": "200L to 300L"
+    },
+    "300-400": {
+        "category": "elementary",
+        "paragraphs": 3,
+        "word_count": "50 to 100 words",
+        "range": "300L to 400L"
+    },
+    "400-500": {
+        "category": "elementary",
+        "paragraphs": 3,
+        "word_count": "60 to 110 words",
+        "range": "400L to 500L"
+    },
+    "500-600": {
+        "category": "elementary",
+        "paragraphs": 4,
+        "word_count": "70 to 120 words",
+        "range": "500L to 600L"
+    },
+    "600-700": {
+        "category": "elementary",
+        "paragraphs": 4,
+        "word_count": "80 to 130 words",
+        "range": "600L to 700L"
+    },
+    "700-800": {
+        "category": "middle",
+        "paragraphs": 5,
+        "word_count": "100 to 200 words",
+        "range": "700L to 800L"
+    },
+    "800-900": {
+        "category": "middle",
+        "paragraphs": 5,
+        "word_count": "100 to 200 words",
+        "range": "800L to 900L"
+    },
+    "900-1000": {
+        "category": "middle",
+        "paragraphs": 5,
+        "word_count": "100 to 200 words",
+        "range": "900L to 1000L"
+    },
+    "1000-1100": {
+        "category": "high",
+        "paragraphs": 6,
+        "word_count": "150 to 250 words",
+        "range": "1000L to 1100L"
+    },
+    "1100-1200": {
+        "category": "high",
+        "paragraphs": 6,
+        "word_count": "150 to 250 words",
+        "range": "1100L to 1200L"
+    }
+}
 
 async def verify_token(authorization: Optional[str] = Header(None)):
     if not authorization:
@@ -105,7 +182,9 @@ class GenerateLessonPlanResponse(BaseModel):
 
 class GenerateWarmupRequest(BaseModel):
     topic: str
-    grade_level: str = None
+    storyTitle: str
+    storyContent: str
+    customPrompt: Optional[str] = None
 
 class GenerateWarmupResponse(BaseModel):
     warmup: str
@@ -118,12 +197,59 @@ class GenerateAssessmentRequest(BaseModel):
 class GenerateAssessmentResponse(BaseModel):
     assessment: str
 
+class Message(BaseModel):
+    role: str
+    content: str
+
 class ChatRequest(BaseModel):
     message: str
+    messages: list[Message] = []
     context: str = None
 
 class ChatResponse(BaseModel):
     response: str
+
+class GeneratePassageRequest(BaseModel):
+    topic: str
+    reading_level: str
+    genre: str = "Informational"
+    generateQuestions: bool = False
+    questionStyle: str = "STAAR"
+    includeAnswerKey: bool = False
+
+class GenerateGuidedReadingIntroRequest(BaseModel):
+    title: str
+    content: str
+    skill: str
+    customPrompt: Optional[str] = None
+
+class GeneratePracticeRequest(BaseModel):
+    skill: str
+    storyTitle: str
+    storyContent: str
+    customPrompt: Optional[str] = None
+
+class GenerateExitTicketRequest(BaseModel):
+    storyTitle: str
+    storyContent: str
+    skill: str
+    practiceContent: str
+    customPrompt: Optional[str] = None
+
+# New Pydantic models for request validation
+class ParseStudentsFromImageRequest(BaseModel):
+    image: str
+    teacherGrade: str
+    teacherId: str
+
+class ParseStudentsRequest(BaseModel):
+    text: str
+    teacherGrade: Optional[str] = ''
+    teacherId: Optional[str] = ''
+
+class ImproveObservationRequest(BaseModel):
+    observation: str
+    topic: str
 
 # Root endpoint
 @app.get("/")
@@ -146,6 +272,193 @@ async def root():
             "chat": "POST /chat"
         }
     }
+
+@app.post("/generate-passage")
+async def generate_passage(request: GeneratePassageRequest):
+    """
+    Generate a reading passage with optional questions based on the specified parameters.
+    """
+    print("Received data:", request.dict())
+    print("Initial reading level:", request.reading_level)
+
+    async def generate():
+        try:
+            print("Processing reading level:", request.reading_level)
+            
+            # Get specifications based on reading level
+            spec = LEXILE_SPECIFICATIONS.get(request.reading_level)
+            if not spec:
+                raise ValueError(f"Reading level '{request.reading_level}' is not supported.")
+            
+            # Use the range from specifications
+            lexile_range = spec["range"]
+            category = spec["category"]
+            num_paragraphs = spec["paragraphs"]
+            word_count = spec["word_count"]
+
+            # Define paragraph instructions
+            paragraph_instructions = f"Include exactly {num_paragraphs} cohesive paragraphs, each containing approximately {word_count}."
+
+            # Create genre-specific guidance
+            genre_guidance = {
+                'Fiction': 'Create a narrative with strong character development, a coherent plot, and vivid sensory details.',
+                'Historical Fiction': 'Blend accurate historical facts with an engaging narrative that brings the past to life.',
+                'Science Fiction': 'Incorporate scientific or technological concepts suitable for the Lexile level, focusing on imagination and curiosity.',
+                'Informational': 'Present factual, well-structured information that clearly explains the topic and provides key details.',
+                'Expository': 'Offer a clear, logical explanation of the topic, supported by relevant facts and examples.',
+                'Persuasive': 'Present a reasoned argument with evidence, guiding readers towards a particular stance or conclusion.'
+            }.get(request.genre, 'Create an engaging passage that effectively addresses the given topic.')
+
+            # Adjust technical requirements based on Lexile specifications
+            if category == 'elementary':
+                technical_requirements = f"""
+- Maintain an approximate Lexile level of {request.reading_level}.
+- Use simple and clear language appropriate for this reading level.
+- {paragraph_instructions}
+- Ensure precise organization and a polished tone.
+- Follow standard test passage formatting conventions (e.g., a clear, bold title; well-structured paragraphs).
+"""
+            elif category == 'middle':
+                technical_requirements = f"""
+- Maintain an approximate Lexile level of {request.reading_level}.
+- Use clear, coherent, and engaging language appropriate for this reading level.
+- {paragraph_instructions}
+- Include descriptive details and logical transitions between ideas.
+- Ensure precise organization, logical progression of ideas, and a polished tone.
+- Follow standard test passage formatting conventions (e.g., a clear, bold title; well-structured paragraphs).
+"""
+            else:  # high
+                technical_requirements = f"""
+- Maintain an approximate Lexile level of {request.reading_level}.
+- Use sophisticated language that is clear, coherent, and engaging.
+- {paragraph_instructions}
+- Include vivid descriptive details, strong transitions between ideas, and a well-structured narrative or informational flow.
+- Incorporate subtle figurative language, relevant examples, and carefully chosen vocabulary.
+- Ensure precise organization, logical progression of ideas, and a polished tone.
+- Follow standard test passage formatting conventions (e.g., a clear, bold title; well-structured paragraphs).
+"""
+
+            # Create question guidance based on question style
+            question_guidance = ""
+            answer_key_guidance = ""
+            if request.generateQuestions:
+                if request.questionStyle.upper() == "STAAR":
+                    question_guidance = """
+After the passage, include 4-5 STAAR-style questions that:
+- Follow the exact STAAR format with specific question stems.
+- Align to Lexile-level readiness and supporting standards.
+- Include a balanced mix of:
+    * Key Ideas and Details (main idea, inference, character analysis)
+    * Author's Purpose and Craft (understanding text structure, point of view, and author's choices)
+    * Integration of Knowledge and Ideas (using evidence, making connections, analyzing information)
+- Use academic and precise vocabulary such as "central idea," "text structure," "according to the passage," and "which sentence."
+- Provide four answer choices (A-D) with plausible distractors representing common misconceptions.
+- Maintain Lexile-level appropriate complexity and align with the reading level specified.
+"""
+                    if request.includeAnswerKey:
+                        answer_key_guidance = """
+After the questions, include an answer key section marked with [[ANSWER_KEY_START]] on its own line, followed by:
+- The correct answer for each question (1-5)
+- A detailed explanation for why each answer is correct
+- References to specific text evidence supporting each answer
+- Common misconceptions addressed by the incorrect options
+
+Format as:
+[[ANSWER_KEY_START]]
+Question 1: [Correct Answer Letter]
+Explanation: [Detailed explanation with text evidence]
+
+Question 2: [Correct Answer Letter]
+Explanation: [Detailed explanation with text evidence]
+
+[etc.]
+"""
+
+            # Construct the prompt
+            prompt = f"""Generate a {request.genre} passage about "{request.topic}" at a {request.reading_level} Lexile level.
+The passage should be presented in a standardized {request.questionStyle} test format and maintain appropriate complexity for {request.reading_level} Lexile level readers.
+
+Genre-specific requirements:
+{genre_guidance}
+
+Technical requirements:
+{technical_requirements}
+
+{question_guidance}
+{answer_key_guidance}
+
+Return the content in this exact markdown format:
+
+# **[Title]**
+
+[Passage content with proper paragraphs]
+
+## Questions
+
+1. [Question text]
+   A. [Answer choice]
+   B. [Answer choice]
+   C. [Answer choice]
+   D. [Answer choice]
+
+2. [Question text]
+   A. [Answer choice]
+   B. [Answer choice]
+   C. [Answer choice]
+   D. [Answer choice]
+
+[etc...]
+
+If includeAnswerKey is true, add this section with a special marker:
+[[ANSWER_KEY_START]]
+**Answer Key**
+
+Question 1: [Letter]  
+Explanation: [Detailed explanation]
+
+Question 2: [Letter]  
+Explanation: [Detailed explanation]
+
+[etc...]
+"""
+
+            print("\n=== PROMPT SENT TO AI ===")
+            print(prompt)
+            print("========================\n")
+
+            # Generate the passage using OpenAI's API
+            client = OpenAI(api_key=openai_api_key)
+            response = client.chat.completions.create(
+                model="gpt-4o",
+                messages=[
+                    {
+                        "role": "system",
+                        "content": "You are an expert in creating Lexile-appropriate reading passages."
+                    },
+                    {
+                        "role": "user",
+                        "content": prompt
+                    }
+                ],
+                temperature=0.7,
+                stream=True
+            )
+
+            for chunk in response:
+                if chunk.choices[0].delta.content is not None:
+                    text = chunk.choices[0].delta.content
+                    yield f"data: {json.dumps({'type': 'content', 'content': text})}\n\n"
+
+            yield f"data: {json.dumps({'type': 'complete'})}\n\n"
+
+        except Exception as e:
+            print(f"Error generating passage: {e}")
+            yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
+
+    return StreamingResponse(
+        generate(),
+        media_type='text/event-stream'
+    )
 
 # Route to improve intervention notes
 @app.post("/improve-intervention", response_model=ImproveInterventionResponse)
@@ -204,7 +517,7 @@ async def generate_story(request: GenerateStoryRequest):
         try:
             client = OpenAI(api_key=openai_api_key)
             response = client.chat.completions.create(
-                model="gpt-4",
+                model="gpt-4o",
                 messages=[
                     {
                         "role": "system", 
@@ -328,36 +641,40 @@ async def generate_lesson_plan(request: GenerateLessonPlanRequest):
         raise HTTPException(status_code=500, detail="An unexpected error occurred.")
 
 # Route to generate warmup activities
-@app.post("/generate-warmup", response_model=GenerateWarmupResponse)
+@app.post("/generate-warmup")
 async def generate_warmup(request: GenerateWarmupRequest):
     """
     Generate a warmup activity using OpenAI's GPT model.
     """
-    try:
-        grade_level_text = f" for grade {request.grade_level}" if request.grade_level else ""
-        prompt = f"""Create a short 2-3 minute warmup activity{grade_level_text} on the topic: {request.topic}
-        
-        Format the response in clear markdown with these exact sections:
-        ### Warm-Up Activity: {request.topic}
-
-        **Time:** 2-3 minutes
-
-        **Objective:**
-        [Brief statement of what students will do]
-
-        **Activity Steps:**
-        1. [First step]
-        2. [Second step]
-        3. [Third step]
-
-        **Teacher Notes:**
-        - [Important points to remember]
-        - [What to look for]"""
-        
+    async def generate():
         try:
+            prompt = f"""Create a brief 2-3 minute warm-up activity to prepare students for reading about {request.topic}.
+
+            Story Title: {request.storyTitle}
+            Story Content: {request.storyContent}
+            {f'Additional Requirements: {request.customPrompt}' if request.customPrompt else ''}
+
+            Format the response in markdown:
+            ### Warm-Up Activity: {request.topic}
+
+            **Time:** 2-3 minutes
+
+            **Objective:**
+            [Brief statement of what students will do]
+
+            **Activity Steps:**
+            1. [First step]
+            2. [Second step]
+            3. [Third step]
+
+            **Teacher Notes:**
+            - [Important points to remember]
+            - [What to look for]
+            """
+
             client = OpenAI(api_key=openai_api_key)
             response = client.chat.completions.create(
-                model="gpt-4o",
+                model="gpt-4",
                 messages=[
                     {"role": "system", "content": "You are an expert at creating engaging warm-up activities for reading lessons."},
                     {"role": "user", "content": prompt}
@@ -366,24 +683,19 @@ async def generate_warmup(request: GenerateWarmupRequest):
                 stream=True
             )
             
-            async def generate():
-                warmup_text = ""
-                for chunk in response:
-                    if chunk.choices[0].delta.content is not None:
-                        content = chunk.choices[0].delta.content
-                        warmup_text += content
-                        yield f"data: {json.dumps({'content': content})}\n\n"
-                yield f"data: {json.dumps({'type': 'complete', 'content': warmup_text})}\n\n"
+            content = ""
+            for chunk in response:
+                if chunk.choices[0].delta.content is not None:
+                    content += chunk.choices[0].delta.content
+                    yield f"data: {json.dumps({'content': chunk.choices[0].delta.content})}\n\n"
 
-            return StreamingResponse(generate(), media_type='text/event-stream')
+            yield f"data: {json.dumps({'type': 'complete', 'content': content})}\n\n"
+                
+        except Exception as e:
+            print(f"Error generating warm-up: {str(e)}")
+            yield f"data: {json.dumps({'type': 'error', 'message': 'Failed to generate warm-up'})}\n\n"
 
-        except Exception as api_error:
-            print(f"OpenAI API error: {str(api_error)}")
-            raise
-
-    except Exception as e:
-        print(f"Unexpected error: {e}")
-        raise HTTPException(status_code=500, detail="An unexpected error occurred.")
+    return StreamingResponse(generate(), media_type='text/event-stream')
 
 # Route to generate assessments
 @app.post("/generate-assessment", response_model=GenerateAssessmentResponse)
@@ -403,66 +715,51 @@ async def generate_assessment(request: GenerateAssessmentRequest):
         print(f"Unexpected error: {e}")
         raise HTTPException(status_code=500, detail="An unexpected error occurred.")
 
-# Route for chat interactions
-@app.post("/chat", response_model=ChatResponse)
-async def chat(request: ChatRequest, token_payload: dict = Depends(verify_token)):
+@app.post("/chat")
+async def chat(request: ChatRequest):
     """
-    Have a conversation with the AI teaching assistant.
+    Chat endpoint that handles streaming responses from OpenAI's GPT model.
     """
     try:
-        print("Chat endpoint called")
-        print(f"OpenAI API key status: {'Configured' if openai_api_key else 'Not configured'}")
-        print(f"OpenAI API key length: {len(openai_api_key) if openai_api_key else 0}")
-        print(f"OpenAI API key prefix: {openai_api_key[:7] + '...' if openai_api_key else 'None'}")
-        print(f"Environment: {os.environ.get('ENVIRONMENT', 'not set')}")
-        print(f"User ID from token: {token_payload.get('teacherId', 'not found')}")
-
-        if not openai_api_key:
-            print("ERROR: OpenAI API key is not set")
-            raise HTTPException(status_code=500, detail="OpenAI API key is not configured")
-
-        system_prompt = """You are a helpful teaching assistant with expertise in education. 
-        You provide clear, concise, and practical advice to teachers. 
-        Focus on being specific and actionable in your responses.
-        Format your responses in a clear, structured way using markdown:
-        - Use headers (###) for main sections
-        - Use bullet points for lists
-        - Use bold (**) for emphasis
-        - Break up text into readable paragraphs
-        - Include numbered steps where appropriate"""
+        # Initialize messages list with system message if not provided
+        messages = [{"role": "system", "content": "You are a helpful teaching assistant."}]
         
-        context = f"\nContext: {request.context}" if request.context else ""
+        # Add context if provided
+        if request.context:
+            messages.append({"role": "system", "content": f"Context: {request.context}"})
         
-        print(f"Sending request to OpenAI API with message: {request.message[:100]}...")
+        # Add previous messages if any
+        if request.messages:
+            messages.extend([{"role": m.role, "content": m.content} for m in request.messages])
         
-        try:
-            client = OpenAI(api_key=openai_api_key)
-            response = client.chat.completions.create(
-                model="gpt-4o",
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": f"{request.message}{context}"}
-                ],
-                temperature=0.7,
-                stream=True
-            )
-            
-            async def generate():
+        # Add the current message
+        messages.append({"role": "user", "content": request.message})
+        
+        async def generate():
+            try:
+                client = OpenAI(api_key=openai_api_key)
+                response = client.chat.completions.create(
+                    model="gpt-4o",
+                    messages=messages,
+                    stream=True
+                )
+                
                 for chunk in response:
                     if chunk.choices[0].delta.content is not None:
                         yield chunk.choices[0].delta.content
-
-            return StreamingResponse(generate(), media_type='text/plain')
-
-        except Exception as api_error:
-            print(f"Detailed OpenAI API error: {str(api_error)}")
-            print(f"Error type: {type(api_error).__name__}")
-            raise
-
+                        
+            except Exception as e:
+                print(f"Error during streaming: {str(e)}")
+                raise
+        
+        return StreamingResponse(
+            generate(),
+            media_type='text/plain'
+        )
+        
     except Exception as e:
-        print(f"Unexpected error in chat endpoint: {str(e)}")
-        print(f"Error type: {type(e).__name__}")
-        raise HTTPException(status_code=500, detail=f"An unexpected error occurred: {str(e)}")
+        print(f"Error in chat endpoint: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 # Health check endpoint
 @app.get("/health")
@@ -470,181 +767,433 @@ async def health_check():
     return {"status": "healthy", "service": "TeachAssist AI API"}
 
 @app.post("/generate-practice")
-async def generate_practice(request: dict):
+async def generate_practice(request: GeneratePracticeRequest):
     """
-    Generate a practice activity with a new story.
+    Generate a practice activity with a new story focusing on a specific skill.
     """
     try:
-        prompt = f"""Create a practice activity with a new short story focusing on {request.get('skill')}.
+        async def generate():
+            try:
+                # Construct the prompt
+                base_prompt = f"""Create a practice activity with a new short story focusing on {request.skill}.
 
-        Format the response in markdown:
-        ### Independent Practice Story: [Generate an engaging title]
+                Format the response in markdown:
+                ### Independent Practice Story: [Generate an engaging title for the story]
 
-        [Write a short story here that demonstrates {request.get('skill')} - about 100 words]
+                [Write a short story here that demonstrates {request.skill} - about 100 words]
 
-        **Practice Questions:**
-        1. [Question specifically about {request.get('skill')}]
-        2. [Another question about {request.get('skill')}]
-        3. [Final question about {request.get('skill')}]
+                **Practice Questions:**
+                1. [Question specifically about {request.skill}]
+                2. [Another question about {request.skill}]
+                3. [Final question about {request.skill}]
 
-        **Student Instructions:**
-        1. Read the story carefully
-        2. Think about {request.get('skill')} as you read
-        3. Answer the questions using evidence from the text"""
+                **Student Instructions:**
+                1. Read the story carefully
+                2. Think about {request.skill} as you read
+                3. Answer the questions using evidence from the text
+                """
 
-        try:
-            client = OpenAI(api_key=openai_api_key)
-            response = client.chat.completions.create(
-                model="gpt-4o",
-                messages=[
-                    {"role": "system", "content": "You are an expert at creating educational content and practice activities."},
-                    {"role": "user", "content": prompt}
-                ],
-                temperature=0.7,
-                stream=True
-            )
-            
-            async def generate():
-                practice_text = ""
+                # Add custom prompt if provided
+                if request.customPrompt:
+                    base_prompt += f"\nAdditional Instructions: {request.customPrompt}"
+
+                client = OpenAI(api_key=openai_api_key)
+                response = client.chat.completions.create(
+                    model="gpt-4o",
+                    messages=[
+                        {
+                            "role": "system",
+                            "content": "You are an expert at creating educational content and practice activities."
+                        },
+                        {
+                            "role": "user",
+                            "content": base_prompt
+                        }
+                    ],
+                    temperature=0.7,
+                    stream=True
+                )
+                
                 for chunk in response:
-                    if chunk.choices[0].delta.content is not None:
-                        content = chunk.choices[0].delta.content
-                        practice_text += content
-                        yield f"data: {json.dumps({'content': content})}\n\n"
-                yield f"data: {json.dumps({'type': 'complete', 'content': practice_text})}\n\n"
+                    if chunk.choices[0].delta.content:
+                        yield f"data: {json.dumps({'content': chunk.choices[0].delta.content})}\n\n"
 
-            return StreamingResponse(generate(), media_type='text/event-stream')
-
-        except Exception as api_error:
-            print(f"OpenAI API error: {str(api_error)}")
-            raise
-
+                yield f"data: {json.dumps({'type': 'complete'})}\n\n"
+                
+            except Exception as e:
+                print(f"Error during streaming: {str(e)}")
+                yield f"data: {json.dumps({'type': 'error', 'message': 'Failed to generate practice content'})}\n\n"
+        
+        return StreamingResponse(generate(), media_type='text/event-stream')
+        
     except Exception as e:
-        print(f"Unexpected error: {e}")
-        raise HTTPException(status_code=500, detail="An unexpected error occurred.")
+        print(f"Error in generate-practice endpoint: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/generate-guided-reading-intro")
-async def generate_guided_reading_intro(request: dict):
+async def generate_guided_reading_intro(request: GenerateGuidedReadingIntroRequest):
     """
-    Generate a guided reading introduction lesson.
+    Generate a guided reading introduction lesson for a story.
     """
     try:
-        prompt = f"""Create a brief 5-minute guided reading introduction lesson for this story. 
-        The lesson should focus on teaching {request.get('skill')}.
+        async def generate():
+            try:
+                # Construct the prompt
+                base_prompt = f"""Create a brief 5-minute guided reading introduction lesson for this story. 
+                The lesson should focus on teaching {request.skill}.
 
-        Story Title: {request.get('title')}
-        Story Content: {request.get('content')}
+                Story Title: {request.title}
+                Story Content: {request.content}
 
-        Format the response in markdown:
-        ### 5-Minute Introduction Lesson: {request.get('skill')}
+                Format the response in markdown:
+                ### 5-Minute Introduction Lesson: {request.skill}
+                """
 
-        **Objective:**
-        [What students will learn about {request.get('skill')}]
+                # Add custom prompt if provided
+                if request.customPrompt:
+                    base_prompt += f"\nAdditional Instructions: {request.customPrompt}"
 
-        **Introduction (1-2 minutes):**
-        - [How to introduce the concept]
-        - [Key points to emphasize]
-
-        **Modeling (2-3 minutes):**
-        1. [Step-by-step demonstration]
-        2. [Examples from the text]
-        3. [Think-aloud points]
-
-        **Guided Practice (1-2 minutes):**
-        - [How students will practice]
-        - [What to look for]
-
-        **Teacher Notes:**
-        - [Important reminders]
-        - [Common misconceptions]
-        - [Support strategies]"""
-
-        try:
-            client = OpenAI(api_key=openai_api_key)
-            response = client.chat.completions.create(
-                model="gpt-4o",
-                messages=[
-                    {"role": "system", "content": "You are an expert reading teacher creating focused, practical guided reading lessons."},
-                    {"role": "user", "content": prompt}
-                ],
-                temperature=0.7,
-                stream=True
-            )
-            
-            async def generate():
-                intro_text = ""
+                client = OpenAI(api_key=openai_api_key)
+                response = client.chat.completions.create(
+                    model="gpt-4o",
+                    messages=[
+                        {
+                            "role": "system",
+                            "content": "You are an expert reading teacher creating focused, practical guided reading lessons."
+                        },
+                        {
+                            "role": "user",
+                            "content": base_prompt
+                        }
+                    ],
+                    temperature=0.7,
+                    stream=True
+                )
+                
                 for chunk in response:
-                    if chunk.choices[0].delta.content is not None:
-                        content = chunk.choices[0].delta.content
-                        intro_text += content
-                        yield f"data: {json.dumps({'content': content})}\n\n"
-                yield f"data: {json.dumps({'type': 'complete', 'content': intro_text})}\n\n"
+                    if chunk.choices[0].delta.content:
+                        yield f"data: {json.dumps({'content': chunk.choices[0].delta.content})}\n\n"
 
-            return StreamingResponse(generate(), media_type='text/event-stream')
-
-        except Exception as api_error:
-            print(f"OpenAI API error: {str(api_error)}")
-            raise
-
+                yield f"data: {json.dumps({'type': 'complete'})}\n\n"
+                
+            except Exception as e:
+                print(f"Error during streaming: {str(e)}")
+                yield f"data: {json.dumps({'type': 'error', 'message': 'Failed to generate lesson introduction'})}\n\n"
+        
+        return StreamingResponse(generate(), media_type='text/event-stream')
+        
     except Exception as e:
-        print(f"Unexpected error: {e}")
-        raise HTTPException(status_code=500, detail="An unexpected error occurred.")
+        print(f"Error in generate-guided-reading-intro endpoint: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/generate-exit-ticket")
-async def generate_exit_ticket(request: dict):
+async def generate_exit_ticket(request: GenerateExitTicketRequest):
     """
-    Generate an exit ticket for lesson assessment.
+    Generate a quick exit ticket activity based on the practice story.
     """
     try:
-        prompt = f"""Create a brief exit ticket assessment for {request.get('skill')}.
+        async def generate():
+            try:
+                # Extract the practice story title and content from the markdown
+                practice_lines = request.practiceContent.split('\n')
+                practice_title = ''
+                practice_story = ''
+                
+                # Parse the practice content to get title and story
+                in_story = False
+                for line in practice_lines:
+                    if line.startswith('### Independent Practice Story:'):
+                        practice_title = line.replace('### Independent Practice Story:', '').strip()
+                    elif line.startswith('**Practice Questions'):
+                        in_story = False
+                    elif practice_title and not line.startswith('**') and not line.startswith('#'):
+                        if line.strip():
+                            practice_story += line.strip() + ' '
+                            in_story = True
 
-        Format the response in markdown:
-        ### Exit Ticket: {request.get('skill')}
+                # Construct the prompt
+                base_prompt = f"""Create a quick 2-minute exit ticket activity based on the Independent Practice story that checks students' understanding of {request.skill}.
 
-        **Learning Target Check:**
-        [Brief statement of what students should have learned]
+                Practice Story Title: {practice_title}
+                Practice Story Content: {practice_story}
 
-        **Questions:**
-        1. [First question about {request.get('skill')}]
-        2. [Second question about {request.get('skill')}]
-        3. [Quick application task]
+                Format the response in markdown:
+                ### 2-Minute Exit Ticket: Checking Understanding
 
-        **Success Criteria:**
-        - [What a complete answer looks like]
-        - [Key points students should include]
+                **Time:** 2 minutes
 
-        **Teacher Notes:**
-        - [What to look for in responses]
-        - [Common misconceptions to address]
-        - [Next steps based on responses]"""
+                **Task:**
+                Based on the story "{practice_title}", complete the following:
+                [Brief task description focusing on {request.skill}]
 
+                **Instructions for Students:**
+                1. [First step specifically about the practice story]
+                2. [Second step using examples from the practice story]
+
+                **Success Criteria:**
+                - [What students need to demonstrate about {request.skill} using the practice story]
+                - [How they should use specific examples from the practice story]
+                
+                **Teacher Note:**
+                [What to look for in student responses regarding {request.skill} and their understanding of the practice story]
+                """
+
+                # Add custom prompt if provided
+                if request.customPrompt:
+                    base_prompt += f"\nAdditional Instructions: {request.customPrompt}"
+
+                client = OpenAI(api_key=openai_api_key)
+                response = client.chat.completions.create(
+                    model="gpt-4o",
+                    messages=[
+                        {
+                            "role": "system",
+                            "content": "You are an expert at creating effective exit tickets that check student understanding of specific reading skills using practice stories."
+                        },
+                        {
+                            "role": "user",
+                            "content": base_prompt
+                        }
+                    ],
+                    temperature=0.7,
+                    stream=True
+                )
+                
+                for chunk in response:
+                    if chunk.choices[0].delta.content:
+                        yield f"data: {json.dumps({'content': chunk.choices[0].delta.content})}\n\n"
+
+                yield f"data: {json.dumps({'type': 'complete'})}\n\n"
+                
+            except Exception as e:
+                print(f"Error during streaming: {str(e)}")
+                yield f"data: {json.dumps({'type': 'error', 'message': 'Failed to generate exit ticket'})}\n\n"
+        
+        return StreamingResponse(generate(), media_type='text/event-stream')
+        
+    except Exception as e:
+        print(f"Error in generate-exit-ticket endpoint: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/parse-students-from-image")
+async def parse_students_from_image(request: ParseStudentsFromImageRequest):
+    """
+    Parse student information from an image.
+    """
+    try:
+        # Use GPT to parse the text content
+        client = OpenAI(api_key=openai_api_key)
+        response = client.chat.completions.create(
+            model="gpt-4o",
+            messages=[
+                {
+                    "role": "system",
+                    "content": """You are a data extraction expert. Extract ALL student information from the provided data. 
+                    The data may be in table format with columns for first name, last name, and reading level.
+                    Process EVERY row and return ALL students in this exact JSON format without any markdown formatting or code blocks:
+                    [
+                        {
+                            "firstName": "string",
+                            "lastName": "string",
+                            "readingLevel": "string",
+                            "gradeLevel": "string"
+                        }
+                    ]
+                    
+                    Important:
+                    - Process EVERY row in the data
+                    - Include ALL students found
+                    - Do not limit the number of students
+                    - Maintain the exact order from the source data
+                    """
+                },
+                {
+                    "role": "user",
+                    "content": f"Extract ALL student information from this data. The data appears to be in a table format with columns for first name, last name, and reading level. Process EVERY row: {request.image}"
+                }
+            ],
+            temperature=0
+        )
+        
+        # Get the response content and clean it
+        content = response.choices[0].message.content.strip()
+        if content.startswith('```'):
+            content = content.replace('```json', '').replace('```', '').strip()
+        
         try:
-            client = OpenAI(api_key=openai_api_key)
-            response = client.chat.completions.create(
-                model="gpt-4o",
-                messages=[
-                    {"role": "system", "content": "You are an expert at creating focused assessment tools for checking student understanding."},
-                    {"role": "user", "content": prompt}
-                ],
-                temperature=0.7,
-                stream=True
+            # Try to parse the JSON response
+            students = json.loads(content)
+            if not isinstance(students, list):
+                raise ValueError("Response is not a list")
+                
+            # Ensure each student has the required fields and teacherId
+            for student in students:
+                student['gradeLevel'] = student.get('gradeLevel', request.teacherGrade)
+                student['teacherId'] = request.teacherId  # Add teacherId to each student
+                if not all(key in student for key in ['firstName', 'lastName']):
+                    raise ValueError("Missing required fields in student data")
+            
+            return {
+                'students': students,
+                'message': f'Successfully processed {len(students)} students'
+            }
+            
+        except json.JSONDecodeError as je:
+            print("JSON Decode Error:", je)
+            raise HTTPException(
+                status_code=500,
+                detail=f"Invalid JSON format in response: {str(je)}"
             )
             
-            async def generate():
-                ticket_text = ""
-                for chunk in response:
-                    if chunk.choices[0].delta.content is not None:
-                        content = chunk.choices[0].delta.content
-                        ticket_text += content
-                        yield f"data: {json.dumps({'content': content})}\n\n"
-                yield f"data: {json.dumps({'type': 'complete', 'content': ticket_text})}\n\n"
-
-            return StreamingResponse(generate(), media_type='text/event-stream')
-
-        except Exception as api_error:
-            print(f"OpenAI API error: {str(api_error)}")
-            raise
-
     except Exception as e:
-        print(f"Unexpected error: {e}")
-        raise HTTPException(status_code=500, detail="An unexpected error occurred.")
+        print(f"Error processing image: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to process image: {str(e)}"
+        )
+
+@app.post("/parse-students")
+async def parse_students(request: ParseStudentsRequest):
+    """
+    Parse student information from text.
+    """
+    try:
+        # Create a prompt that explains what we want
+        prompt = f"""Extract student information from the following text and return a JSON array of student objects.
+        Each student object should have: 
+        - firstName (required)
+        - lastName (required)
+        - studentId (required, generate a random ID if not provided)
+        - gradeLevel (use "{request.teacherGrade}" if not specified)
+        - readingLevel (required)
+        - teacherId (use "{request.teacherId}")
+        - periodId (optional)
+        - groupIds (optional, array of strings)
+        - intervention (optional)
+        - interventionResults (optional)
+        The text might be in any format but will contain student information.
+        If certain information is missing, make reasonable assumptions based on context.
+        
+        Text to parse:
+        {request.text}
+        Return only the JSON array without any markdown formatting or code blocks.
+        Example format:
+        [
+          {{
+            "firstName": "John",
+            "lastName": "Doe",
+            "studentId": "ST" + random 6 digits,
+            "gradeLevel": "{request.teacherGrade}",
+            "readingLevel": "B",
+            "teacherId": "{request.teacherId}",
+            "periodId": null,
+            "groupIds": [],
+            "intervention": "",
+            "interventionResults": ""
+          }}
+        ]
+        """
+        
+        # Call OpenAI API
+        client = OpenAI(api_key=openai_api_key)
+        response = client.chat.completions.create(
+            model="gpt-4o",
+            messages=[
+                {
+                    "role": "system", 
+                    "content": "You are a helpful assistant that extracts student information from text and returns it in a structured JSON format. Do not include markdown formatting or code blocks in your response."
+                },
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.1,
+        )
+        
+        # Get the response text and clean it
+        students_json = response.choices[0].message.content.strip()
+        
+        # Remove markdown code block if present
+        if students_json.startswith('```'):
+            students_json = students_json.replace('```json', '').replace('```', '').strip()
+        
+        students = json.loads(students_json)
+        
+        # Validate the structure of each student object
+        required_fields = ['firstName', 'lastName', 'studentId', 'gradeLevel', 'readingLevel', 'teacherId']
+        for i, student in enumerate(students):
+            if not all(key in student for key in required_fields):
+                missing = [key for key in required_fields if key not in student]
+                raise ValueError(f"Student {i + 1} missing required fields: {', '.join(missing)}")
+        
+        return {"students": students}
+        
+    except json.JSONDecodeError as e:
+        print(f"JSON Decode Error: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to parse AI response as JSON: {str(e)}"
+        )
+    except ValueError as e:
+        print(f"Validation Error: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=str(e)
+        )
+    except Exception as e:
+        print(f"Unexpected Error: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=str(e)
+        )
+
+@app.post("/improve-observation")
+async def improve_observation(request: ImproveObservationRequest):
+    """
+    Enhance an observation about a topic to be more specific and professional.
+    """
+    try:
+        prompt = f"""Enhance this observation about {request.topic} to be more specific and professional. 
+        Keep it concise (2-3 sentences) and natural. Focus on the student's understanding of {request.topic}.
+        Do not include any phrases like 'revised' or 'improved' or anything that indicates AI modification.
+        Simply provide the enhanced observation as if it was written directly by the teacher.
+
+        Original: {request.observation}
+
+        Guidelines:
+        1. Keep it brief but specific
+        2. Use professional educational language
+        3. Focus on observable behaviors related to {request.topic}
+        4. Include one clear next step
+        5. Write in a natural teacher's voice
+        6. Do not use any meta-language about the observation being revised or improved
+        """
+
+        client = OpenAI(api_key=openai_api_key)
+        response = client.chat.completions.create(
+            model="gpt-4o",
+            messages=[
+                {
+                    "role": "system",
+                    "content": "You are writing as the teacher, providing direct observations about students."
+                },
+                {
+                    "role": "user",
+                    "content": prompt
+                }
+            ],
+            temperature=0.7,
+            max_tokens=200
+        )
+        
+        improved_observation = response.choices[0].message.content.strip()
+        
+        # Remove any potential prefixes like "Enhanced:" or "Improved:"
+        improved_observation = improved_observation.replace("Enhanced:", "").replace("Improved:", "").strip()
+        
+        return {"content": improved_observation}
+        
+    except Exception as e:
+        print(f"Error improving observation: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to improve observation: {str(e)}"
+        )

@@ -5,6 +5,16 @@ Add login options using LinkedIn.
 Add login options using Google.
 
 
+
+
+TODO
+    MODIFY MENU TITLES
+    MAKE NAVIGATION EASIER THROUGH THE DASHBOARD
+    MOVE EDIT PROFILE TO THE END WHEN COMPLETE
+    
+
+
+
 Lesson Plan and Resource Management
 Lesson Plan Improvements:
 

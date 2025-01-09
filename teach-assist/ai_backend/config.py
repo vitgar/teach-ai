@@ -2,34 +2,36 @@
 Configuration settings for the AI backend.
 """
 
-# OpenAI Model Settings
+# OpenAI model configurations
 OPENAI_MODELS = {
-    "default": "gpt-4o",  # Default model for complex tasks
-    "mini": "gpt-4o-mini",  # Lighter model for simpler tasks
+    "default": "gpt-4",
+    "chat": "gpt-4",
+    "passage": "gpt-4",
+    "story": "gpt-4"
 }
 
-# Model assignments for different endpoints
+# Model mapping for different endpoints
 ENDPOINT_MODELS = {
-    "generate_passage": OPENAI_MODELS["default"],
-    "generate_worksheet": OPENAI_MODELS["mini"],
-    "generate_warmup": OPENAI_MODELS["mini"],
-    "generate_story": OPENAI_MODELS["mini"],
-    "generate_guided_reading_intro": OPENAI_MODELS["mini"],
-    "generate_graphic_organizer": OPENAI_MODELS["mini"],
-    "generate_exit_ticket": OPENAI_MODELS["mini"],
-    "generate_practice": OPENAI_MODELS["mini"],
-    "improve_observation": OPENAI_MODELS["mini"],
-    "chat": OPENAI_MODELS["default"],
-    "parse_students_from_image": OPENAI_MODELS["default"],
-    "parse_students": OPENAI_MODELS["default"],
+    "generate_passage": "gpt-4",
+    "generate_worksheet": "gpt-4",
+    "generate_warmup": "gpt-4",
+    "generate_story": "gpt-4",
+    "generate_guided_reading_intro": "gpt-4",
+    "generate_practice": "gpt-4",
+    "generate_exit_ticket": "gpt-4",
+    "generate_graphic_organizer": "gpt-4",
+    "improve_observation": "gpt-4",
+    "parse_students": "gpt-4",
+    "parse_students_from_image": "gpt-4"
 }
 
-# API Settings
+# API settings
 API_SETTINGS = {
-    "timeout": 60,  # Default timeout in seconds
-    "temperature": 0.7,  # Default temperature for most endpoints
+    "temperature": 0.7,
+    "timeout": 60,
     "max_tokens": {
-        "default": None,  # No limit by default
-        "improve_observation": 150,  # Specific limit for observations
+        "default": 1000,
+        "improve_observation": 200,
+        "parse_students": 500
     }
 } 

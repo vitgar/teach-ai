@@ -111,6 +111,15 @@ interface StandardOption {
   displayText: string;
 }
 
+interface PromptBoxProps {
+  value: string;
+  onChange: (value: string) => void;
+  onSubmit: () => void;
+  placeholder?: string;
+  isLoading?: boolean;
+  label?: string;
+}
+
 const MODIFY_SECTIONS: ModifySection[] = [
   { value: 'all', label: 'Modify All' },
   { value: 'warmUp', label: 'Warm Up' },
@@ -119,56 +128,29 @@ const MODIFY_SECTIONS: ModifySection[] = [
   { value: 'writingComprehension', label: 'Checking Comprehension' },
 ];
 
-const MarkdownSection = ({ title, content, onRegenerate, placeholder }: MarkdownSectionProps) => {
-  const [prompt, setPrompt] = useState('');
-  const [isRegenerating, setIsRegenerating] = useState(false);
-
-  const handleRegenerate = async () => {
-    if (!prompt || !onRegenerate) return;
-    
-    setIsRegenerating(true);
-    try {
-      await onRegenerate(prompt);
-      setPrompt(''); // Clear prompt after successful regeneration
-    } catch (error) {
-      console.error('Error regenerating content:', error);
-    } finally {
-      setIsRegenerating(false);
-    }
-  };
-
+const PromptBox: React.FC<PromptBoxProps> = ({
+  value,
+  onChange,
+  onSubmit,
+  placeholder = "Enter your modifications...",
+  isLoading = false,
+  label = "Modify Content"
+}) => {
   return (
-    <Box sx={{ mb: 4 }}>
-      <Typography variant="h6" gutterBottom sx={{ color: 'primary.main', mb: 2 }}>
-        {title}
-      </Typography>
-      <Paper 
-        elevation={0} 
-        sx={{ 
-          p: 2, 
-          backgroundColor: 'grey.50',
-          minHeight: '100px',
-          '& p': { margin: 0 },
-          '& ul, & ol': { marginTop: 1, marginBottom: 1 },
-        }}
-      >
-        <ReactMarkdown>{content || 'No content generated yet...'}</ReactMarkdown>
-      </Paper>
-      
-      {/* Prompt Field */}
-      <Box sx={{ 
-        mt: 2, 
-        display: 'flex', 
-        gap: 1,
-        alignItems: 'flex-start'
-      }}>
+    <Box sx={{ width: '100%', mb: 2 }}>
+      {label && (
+        <Typography variant="subtitle2" sx={{ mb: 1, color: 'text.secondary' }}>
+          {label}
+        </Typography>
+      )}
+      <Box sx={{ display: 'flex', gap: 1 }}>
         <TextField
           fullWidth
           multiline
           rows={2}
-          value={prompt}
-          onChange={(e) => setPrompt(e.target.value)}
-          placeholder={placeholder || "Enter your modifications or specific requirements..."}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder={placeholder}
           size="small"
           sx={{
             '& .MuiOutlinedInput-root': {
@@ -177,8 +159,8 @@ const MarkdownSection = ({ title, content, onRegenerate, placeholder }: Markdown
           }}
         />
         <IconButton
-          onClick={handleRegenerate}
-          disabled={!prompt || isRegenerating || !content}
+          onClick={onSubmit}
+          disabled={!value || isLoading}
           sx={{
             backgroundColor: 'primary.main',
             color: 'white',
@@ -194,7 +176,7 @@ const MarkdownSection = ({ title, content, onRegenerate, placeholder }: Markdown
             mt: 1
           }}
         >
-          {isRegenerating ? (
+          {isLoading ? (
             <CircularProgress size={20} sx={{ color: 'white' }} />
           ) : (
             <SendIcon />
@@ -253,6 +235,12 @@ const LessonPlan = () => {
   ]);
   const [isSaving, setIsSaving] = useState(false);
   const [currentLessonPlanId, setCurrentLessonPlanId] = useState<string | null>(null);
+  const [sectionPrompts, setSectionPrompts] = useState<{[key: string]: string}>({
+    warmUp: '',
+    introduction: '',
+    guidedPractice: '',
+    writingComprehension: ''
+  });
 
   // Mapping origin to group type
   const originTypeMap: { [key: string]: string } = {
@@ -420,7 +408,7 @@ const LessonPlan = () => {
   };
 
   const handleGenerateStory = async () => {
-    if ((!focus && !selectedStandard) || !lexileLevel) return;
+    if (!selectedStandard || !lexileLevel) return;
     
     setIsGeneratingStory(true);
     try {
@@ -467,7 +455,7 @@ const LessonPlan = () => {
               if (data.type === 'story') {
                 storyContent += data.content;
                 setStory(prev => ({
-                  title: prev?.title || '',  // Provide default empty string
+                  title: prev?.title || '',
                   content: storyContent
                 }));
               } else if (data.type === 'title') {
@@ -475,10 +463,9 @@ const LessonPlan = () => {
                 setBookTitle(storyTitle);
                 setStory(prev => ({
                   title: storyTitle,
-                  content: prev?.content || ''  // Provide default empty string
+                  content: prev?.content || ''
                 }));
               } else if (data.type === 'complete') {
-                // Save the complete story
                 newStory = {
                   title: data.title,
                   content: data.content
@@ -495,7 +482,8 @@ const LessonPlan = () => {
 
       // Only proceed with generating other sections if we have a story
       if (newStory) {
-        // Now generate all sections using streaming
+        const story = newStory; // Create a non-null reference
+        // Set initial loading state for all sections
         setLessonContent(prev => ({
           ...prev,
           warmUp: 'Generating...',
@@ -505,60 +493,69 @@ const LessonPlan = () => {
         }));
 
         try {
-          // Create a variable to store the practice content
-          let practiceContent = '';
-
-          // Generate first three sections in parallel and store their results
-          const results = await Promise.all([
+          // Generate warm-up, introduction, and practice in parallel
+          const [warmUpResult, introResult, practiceResult] = await Promise.all([
             // Generate warm-up
-            handleStreamingResponse(
-              '/generate-warmup',
-              {
-                topic: topicToUse,
-                storyTitle: newStory.title,
-                storyContent: newStory.content
-              },
-              'warmUp',
-              (content) => setLessonContent(prev => ({ ...prev, warmUp: content }))
-            ),
+            new Promise<string>(async (resolve) => {
+              await handleStreamingResponse(
+                '/generate-warmup',
+                {
+                  topic: topicToUse,
+                  storyTitle: story.title,
+                  storyContent: story.content
+                },
+                'warmUp',
+                (content) => {
+                  setLessonContent(prev => ({ ...prev, warmUp: content }));
+                  resolve(content);
+                }
+              );
+            }),
 
             // Generate introduction
-            handleStreamingResponse(
-              '/generate-guided-reading-intro',
-              {
-                title: newStory.title,
-                content: newStory.content,
-                skill: topicToUse
-              },
-              'introduction',
-              (content) => setLessonContent(prev => ({ ...prev, introduction: content }))
-            ),
+            new Promise<string>(async (resolve) => {
+              await handleStreamingResponse(
+                '/generate-guided-reading-intro',
+                {
+                  title: story.title,
+                  content: story.content,
+                  skill: topicToUse
+                },
+                'introduction',
+                (content) => {
+                  setLessonContent(prev => ({ ...prev, introduction: content }));
+                  resolve(content);
+                }
+              );
+            }),
 
-            // Generate practice story
-            handleStreamingResponse(
-              '/generate-practice',
-              {
-                skill: topicToUse,
-                storyTitle: newStory.title,
-                storyContent: newStory.content
-              },
-              'guidedPractice',
-              (content) => {
-                setLessonContent(prev => ({ ...prev, guidedPractice: content }));
-                practiceContent = content; // Store the practice content
-              }
-            )
+            // Generate practice
+            new Promise<string>(async (resolve) => {
+              await handleStreamingResponse(
+                '/generate-practice',
+                {
+                  skill: topicToUse,
+                  storyTitle: story.title,
+                  storyContent: story.content
+                },
+                'guidedPractice',
+                (content) => {
+                  setLessonContent(prev => ({ ...prev, guidedPractice: content }));
+                  resolve(content);
+                }
+              );
+            })
           ]);
 
-          // Now generate exit ticket using the stored practice content
-          if (practiceContent) {
+          // After practice content is available, generate exit ticket
+          if (practiceResult) {
             await handleStreamingResponse(
               '/generate-exit-ticket',
               {
-                storyTitle: newStory.title,
-                storyContent: newStory.content,
+                storyTitle: story.title,
+                storyContent: story.content,
                 skill: topicToUse,
-                practiceContent: practiceContent
+                practiceContent: practiceResult
               },
               'writingComprehension',
               (content) => setLessonContent(prev => ({ ...prev, writingComprehension: content }))
@@ -582,161 +579,98 @@ const LessonPlan = () => {
     }
   };
 
-  const handleSectionModify = async () => {
-    if (!modifyPrompt || isModifying || !story) return;
+  const handleSectionPromptChange = (section: string, value: string) => {
+    setSectionPrompts(prev => ({
+      ...prev,
+      [section]: value
+    }));
+  };
+
+  const handleIndividualSectionModify = async (section: keyof LessonContent) => {
+    if (!sectionPrompts[section] || !story) return;
     
     setIsModifying(true);
     try {
-      if (selectedSection === 'all') {
-        // Save current state to history for all sections
-        setSectionHistory(prev => ({
-          warmUp: { versions: [lessonContent.warmUp, ...prev.warmUp.versions].slice(0, 5), currentIndex: prev.warmUp.versions.length },
-          introduction: { versions: [lessonContent.introduction, ...prev.introduction.versions].slice(0, 5), currentIndex: prev.introduction.versions.length },
-          guidedPractice: { versions: [lessonContent.guidedPractice, ...prev.guidedPractice.versions].slice(0, 5), currentIndex: prev.guidedPractice.versions.length },
-          writingComprehension: { versions: [lessonContent.writingComprehension, ...prev.writingComprehension.versions].slice(0, 5), currentIndex: prev.writingComprehension.versions.length },
-        }));
+      // Save current section state to history
+      setSectionHistory(prev => ({
+        ...prev,
+        [section]: {
+          versions: [lessonContent[section], ...prev[section].versions].slice(0, 5),
+          currentIndex: prev[section].versions.length
+        }
+      }));
 
-        // Set loading state for all sections
-        setLessonContent(prev => ({
-          ...prev,
-          warmUp: 'Generating...',
-          introduction: 'Generating...',
-          guidedPractice: 'Generating...',
-          writingComprehension: 'Generating...'
-        }));
+      // Set loading state for selected section
+      setLessonContent(prev => ({
+        ...prev,
+        [section]: 'Generating...'
+      }));
 
-        // Generate all sections in parallel with streaming
-        await Promise.all([
-          handleStreamingResponse(
+      // Generate new content with streaming based on section
+      switch (section) {
+        case 'warmUp':
+          await handleStreamingResponse(
             '/generate-warmup',
             {
               topic: focus,
               storyTitle: story.title,
               storyContent: story.content,
-              customPrompt: modifyPrompt
+              customPrompt: sectionPrompts[section]
             },
-            'warmUp',
-            (content) => setLessonContent(prev => ({ ...prev, warmUp: content }))
-          ),
-          
-          handleStreamingResponse(
+            section,
+            (content) => setLessonContent(prev => ({ ...prev, [section]: content }))
+          );
+          break;
+
+        case 'introduction':
+          await handleStreamingResponse(
             '/generate-guided-reading-intro',
             {
               title: story.title,
               content: story.content,
               skill: focus,
-              customPrompt: modifyPrompt
+              customPrompt: sectionPrompts[section]
             },
-            'introduction',
-            (content) => setLessonContent(prev => ({ ...prev, introduction: content }))
-          ),
-          
-          handleStreamingResponse(
+            section,
+            (content) => setLessonContent(prev => ({ ...prev, [section]: content }))
+          );
+          break;
+
+        case 'guidedPractice':
+          await handleStreamingResponse(
             '/generate-practice',
             {
               skill: focus,
               storyTitle: story.title,
               storyContent: story.content,
-              customPrompt: modifyPrompt
+              customPrompt: sectionPrompts[section]
             },
-            'guidedPractice',
-            (content) => setLessonContent(prev => ({ ...prev, guidedPractice: content }))
-          ),
-          
-          handleStreamingResponse(
+            section,
+            (content) => setLessonContent(prev => ({ ...prev, [section]: content }))
+          );
+          break;
+
+        case 'writingComprehension':
+          await handleStreamingResponse(
             '/generate-exit-ticket',
             {
               storyTitle: story.title,
               storyContent: story.content,
               skill: focus,
-              customPrompt: modifyPrompt
+              customPrompt: sectionPrompts[section],
+              practiceContent: lessonContent.guidedPractice
             },
-            'writingComprehension',
-            (content) => setLessonContent(prev => ({ ...prev, writingComprehension: content }))
-          )
-        ]);
-
-      } else {
-        // Handle single section modification
-        const sectionKey = selectedSection as keyof LessonContent;
-        
-        // Save current section state to history
-        setSectionHistory(prev => ({
-          ...prev,
-          [sectionKey]: {
-            versions: [lessonContent[sectionKey], ...prev[sectionKey].versions].slice(0, 5),
-            currentIndex: prev[sectionKey].versions.length
-          }
-        }));
-
-        // Set loading state for selected section
-        setLessonContent(prev => ({
-          ...prev,
-          [sectionKey]: 'Generating...'
-        }));
-
-        // Generate new content with streaming
-        switch (sectionKey) {
-          case 'warmUp':
-            await handleStreamingResponse(
-              '/generate-warmup',
-              {
-                topic: focus,
-                storyTitle: story.title,
-                storyContent: story.content,
-                customPrompt: modifyPrompt
-              },
-              sectionKey,
-              (content) => setLessonContent(prev => ({ ...prev, [sectionKey]: content }))
-            );
-            break;
-
-          case 'introduction':
-            await handleStreamingResponse(
-              '/generate-guided-reading-intro',
-              {
-                title: story.title,
-                content: story.content,
-                skill: focus,
-                customPrompt: modifyPrompt
-              },
-              sectionKey,
-              (content) => setLessonContent(prev => ({ ...prev, [sectionKey]: content }))
-            );
-            break;
-
-          case 'guidedPractice':
-            await handleStreamingResponse(
-              '/generate-practice',
-              {
-                skill: focus,
-                storyTitle: story.title,
-                storyContent: story.content,
-                customPrompt: modifyPrompt
-              },
-              sectionKey,
-              (content) => setLessonContent(prev => ({ ...prev, [sectionKey]: content }))
-            );
-            break;
-
-          case 'writingComprehension':
-            await handleStreamingResponse(
-              '/generate-exit-ticket',
-              {
-                storyTitle: story.title,
-                storyContent: story.content,
-                skill: focus,
-                customPrompt: modifyPrompt,
-                practiceContent: lessonContent.guidedPractice
-              },
-              sectionKey,
-              (content) => setLessonContent(prev => ({ ...prev, [sectionKey]: content }))
-            );
-            break;
-        }
+            section,
+            (content) => setLessonContent(prev => ({ ...prev, [section]: content }))
+          );
+          break;
       }
       
-      setModifyPrompt(''); // Clear the prompt after successful modification
+      // Clear the prompt after successful modification
+      setSectionPrompts(prev => ({
+        ...prev,
+        [section]: ''
+      }));
     } catch (error) {
       console.error('Error modifying content:', error);
       setError('Failed to modify content');
@@ -883,36 +817,41 @@ const LessonPlan = () => {
       )}
 
       <Box sx={{ mt: 3 }}>
-        {/* Original Fields */}
-        <FormControl fullWidth sx={{ mb: 2 }}>
-          <InputLabel id="groups-label">Select Groups</InputLabel>
-          <Select
-            labelId="groups-label"
-            multiple
-            value={selectedGroups}
-            onChange={handleGroupChange}
-            input={<OutlinedInput label="Select Groups" />}
-            renderValue={(selected) => {
-              return groups
-                .filter(group => selected.includes(group._id))
-                .map(group => group.name)
-                .join(', ');
-            }}
-          >
-            {groups.map((group) => (
-              <MenuItem key={group._id} value={group._id}>
-                <Checkbox checked={selectedGroups.indexOf(group._id) > -1} />
-                <ListItemText 
-                  primary={group.name} 
-                  secondary={`${group.students.length} students`}
-                />
-              </MenuItem>
-            ))}
-          </Select>
-        </FormControl>
+        {/* Groups and Standards in the same row */}
+        <Box sx={{ 
+          display: 'flex', 
+          gap: 2, 
+          mb: 2,
+          alignItems: 'flex-start'
+        }}>
+          <FormControl sx={{ flex: 1 }}>
+            <InputLabel id="groups-label">Select Groups</InputLabel>
+            <Select
+              labelId="groups-label"
+              multiple
+              value={selectedGroups}
+              onChange={handleGroupChange}
+              input={<OutlinedInput label="Select Groups" />}
+              renderValue={(selected) => {
+                return groups
+                  .filter(group => selected.includes(group._id))
+                  .map(group => group.name)
+                  .join(', ');
+              }}
+            >
+              {groups.map((group) => (
+                <MenuItem key={group._id} value={group._id}>
+                  <Checkbox checked={selectedGroups.indexOf(group._id) > -1} />
+                  <ListItemText 
+                    primary={group.name} 
+                    secondary={`${group.students.length} students`}
+                  />
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
 
-        <Box sx={{ mb: 2 }}>
-          <FormControl fullWidth sx={{ mb: 2 }}>
+          <FormControl sx={{ flex: 2 }}>
             <Autocomplete
               value={standards.find(s => s._id === selectedStandard) || null}
               onChange={(_, newValue: Standard | null) => {
@@ -1002,268 +941,210 @@ const LessonPlan = () => {
               }}
             />
           </FormControl>
-
-          {!selectedStandard && (
-            <TextField
-              label="Focus"
-              value={focus}
-              onChange={(e) => setFocus(e.target.value)}
-              fullWidth
-              sx={{ mb: 2 }}
-            />
-          )}
         </Box>
 
+        {/* Rest of the components */}
         <Box sx={{ 
           display: 'flex', 
           gap: 2, 
-          mb: 2 
+          mb: 4,
+          alignItems: 'center'
         }}>
-          <TextField
-            label="Focus"
-            value={focus}
-            onChange={(e) => setFocus(e.target.value)}
-            sx={{ flex: 2 }}
-          />
-          <Autocomplete
-            freeSolo
-            value={lexileLevel}
-            onChange={(_, newValue) => setLexileLevel(typeof newValue === 'string' ? newValue : newValue?.level || '')}
-            inputValue={lexileLevel}
-            onInputChange={(_, newInputValue) => setLexileLevel(newInputValue)}
-            options={lexileLevels}
-            getOptionLabel={(option) => {
-              if (typeof option === 'string') return option;
-              return `${option.level}${option.description ? ` - ${option.description}` : ''}`;
-            }}
-            renderInput={(params) => (
-              <TextField
-                {...params}
-                label="Lexile Level"
-                sx={{ flex: 1, minWidth: '200px' }}
-              />
-            )}
-            sx={{ flex: 1 }}
-          />
-        </Box>
-
-        {/* Book Title and Generate Lesson Plan Button */}
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 4 }}>
-          <TextField
-            label="Book/Text Title"
-            value={bookTitle}
-            onChange={(e) => setBookTitle(e.target.value)}
-            sx={{ width: '40%' }}
-            InputProps={{ readOnly: true }}
-          />
-          {story && (
-            <IconButton
-              onClick={() => setStoryDialogOpen(true)}
-              size="medium"
-              sx={{ 
-                backgroundColor: 'primary.main',
-                color: 'white',
-                '&:hover': { backgroundColor: 'primary.dark' },
-                width: 40,
-                height: 40
+          <Box sx={{ width: '300px' }}>
+            <Autocomplete
+              freeSolo
+              value={lexileLevel}
+              onChange={(_, newValue) => setLexileLevel(typeof newValue === 'string' ? newValue : newValue?.level || '')}
+              inputValue={lexileLevel}
+              onInputChange={(_, newInputValue) => setLexileLevel(newInputValue)}
+              options={lexileLevels}
+              getOptionLabel={(option) => {
+                if (typeof option === 'string') return option;
+                return `${option.level}${option.description ? ` - ${option.description}` : ''}`;
               }}
-            >
-              <BookIcon />
-            </IconButton>
-          )}
-          <Box sx={{ display: 'flex', gap: 2, mb: 4 }}>
-            <Button
-              variant="contained"
-              color="primary"
-              onClick={handleGenerateStory}
-              disabled={(!focus && !selectedStandard) || !lexileLevel || isGeneratingStory}
-              startIcon={isGeneratingStory ? <CircularProgress size={20} /> : null}
-              sx={{ height: '48px' }}
-            >
-              {isGeneratingStory ? 'Generating...' : 'Generate Lesson Plan'}
-            </Button>
-
-            <Button
-              variant="contained"
-              color="secondary"
-              onClick={handleSaveLessonPlan}
-              disabled={!story || !selectedStandard || !lexileLevel || isSaving}
-              startIcon={isSaving ? <CircularProgress size={20} /> : <SaveIcon />}
-              sx={{ height: '48px' }}
-            >
-              {isSaving ? 'Saving...' : currentLessonPlanId ? 'Update Lesson Plan' : 'Save Lesson Plan'}
-            </Button>
+              renderInput={(params) => (
+                <TextField
+                  {...params}
+                  label="Lexile Level"
+                />
+              )}
+            />
           </Box>
+
+          <Button
+            variant="contained"
+            color="primary"
+            onClick={handleGenerateStory}
+            disabled={!selectedStandard || !lexileLevel || isGeneratingStory}
+            startIcon={isGeneratingStory ? <CircularProgress size={20} /> : null}
+            sx={{ height: '48px' }}
+          >
+            {isGeneratingStory ? 'Generating...' : 'Generate Lesson Plan'}
+          </Button>
+
+          <Button
+            variant="contained"
+            color="secondary"
+            onClick={handleSaveLessonPlan}
+            disabled={!story || !selectedStandard || !lexileLevel || isSaving}
+            startIcon={isSaving ? <CircularProgress size={20} /> : <SaveIcon />}
+            sx={{ height: '48px' }}
+          >
+            {isSaving ? 'Saving...' : currentLessonPlanId ? 'Update Lesson Plan' : 'Save Lesson Plan'}
+          </Button>
         </Box>
 
-        {/* Split Panel Layout */}
+        {/* Content sections */}
         <Box sx={{ 
-          display: 'flex', 
-          gap: 3, 
           mt: 4,
-          height: 'calc(100vh - 400px)', // Adjust this value based on your header height
-          position: 'relative'
+          height: 'calc(100vh - 400px)',
+          position: 'relative',
+          overflow: 'auto',
+          pr: 2,
+          '&::-webkit-scrollbar': {
+            width: '8px',
+          },
+          '&::-webkit-scrollbar-track': {
+            backgroundColor: 'grey.100',
+            borderRadius: '4px',
+          },
+          '&::-webkit-scrollbar-thumb': {
+            backgroundColor: 'grey.400',
+            borderRadius: '4px',
+            '&:hover': {
+              backgroundColor: 'grey.500',
+            },
+          },
         }}>
-          {/* Left Panel - Fixed */}
-          <Box sx={{ 
-            width: '300px',
-            position: 'sticky',
-            top: 0,
-            alignSelf: 'flex-start'
-          }}>
-            <FormControl fullWidth sx={{ mb: 2 }}>
-              <InputLabel>Select Section to Modify</InputLabel>
-              <Select
-                value={selectedSection}
-                onChange={(e) => setSelectedSection(e.target.value as 'all' | keyof LessonContent)}
-                label="Select Section to Modify"
+          {/* Generated Story Section */}
+          {story && (
+            <Box sx={{ mb: 4 }}>
+              <Typography variant="h6" sx={{ color: 'primary.main', mb: 2 }}>
+                Generated Story
+              </Typography>
+              <Paper 
+                elevation={0} 
+                sx={{ 
+                  p: 2, 
+                  backgroundColor: 'grey.50',
+                  minHeight: '100px',
+                  '& p': { margin: '0.5em 0' }
+                }}
               >
-                {MODIFY_SECTIONS.map((section) => (
-                  <MenuItem key={section.value} value={section.value}>
-                    {section.label}
-                  </MenuItem>
-                ))}
-              </Select>
-            </FormControl>
-            
-            <TextField
-              fullWidth
-              multiline
-              rows={4}
-              value={modifyPrompt}
-              onChange={(e) => setModifyPrompt(e.target.value)}
-              placeholder="Enter your modifications..."
-              sx={{ mb: 2 }}
-            />
-            
-            <Button
-              fullWidth
-              variant="contained"
-              onClick={handleSectionModify}
-              disabled={!modifyPrompt || isModifying}
-              startIcon={isModifying ? <CircularProgress size={20} /> : null}
-              sx={{ height: '48px' }}
-            >
-              {isModifying ? 'Modifying...' : 'Apply Changes'}
-            </Button>
-          </Box>
+                <Typography variant="h6" gutterBottom>{story.title}</Typography>
+                <ReactMarkdown>{story.content}</ReactMarkdown>
+              </Paper>
+            </Box>
+          )}
 
-          {/* Right Panel - Scrollable */}
-          <Box sx={{ 
-            flex: 1,
-            overflow: 'auto',
-            maxHeight: '100%',
-            pr: 2, // Add padding for scrollbar
-            '&::-webkit-scrollbar': {
-              width: '8px',
-            },
-            '&::-webkit-scrollbar-track': {
-              backgroundColor: 'grey.100',
-              borderRadius: '4px',
-            },
-            '&::-webkit-scrollbar-thumb': {
-              backgroundColor: 'grey.400',
-              borderRadius: '4px',
-              '&:hover': {
-                backgroundColor: 'grey.500',
-              },
-            },
-          }}>
-            {Object.entries(lessonContent).map(([key, content]) => {
-              const sectionData = sectionHistory[key as keyof LessonContent];
-              const hasVersions = sectionData.versions.length > 0;
-              const isFirstVersion = sectionData.currentIndex === 0;
-              const isLastVersion = sectionData.currentIndex === sectionData.versions.length - 1;
-              const totalVersions = sectionData.versions.length;
+          {/* Lesson Content Sections */}
+          {story && Object.entries(lessonContent).map(([key, content]) => {
+            const sectionKey = key as keyof LessonContent;
+            const historyData = sectionHistory[sectionKey];
+            const hasVersions = historyData.versions.length > 0;
+            const isFirstVersion = historyData.currentIndex === 0;
+            const isLastVersion = historyData.currentIndex === historyData.versions.length - 1;
+            const totalVersions = historyData.versions.length;
 
-              return (
-                <Box key={key} sx={{ mb: 4, position: 'relative' }}>
-                  <Box sx={{ 
-                    display: 'flex', 
-                    justifyContent: 'space-between', 
-                    alignItems: 'center', 
-                    mb: 2 
-                  }}>
-                    <Typography variant="h6" sx={{ color: 'primary.main' }}>
-                      {MODIFY_SECTIONS.find(s => s.value === key)?.label}
-                    </Typography>
-                    {hasVersions && totalVersions > 1 && (
-                      <Box sx={{ 
-                        display: 'flex', 
-                        alignItems: 'center', 
-                        gap: 1 
-                      }}>
-                        {!isFirstVersion && (
-                          <IconButton
-                            onClick={() => handleVersionChange(key as keyof LessonContent, 'prev')}
-                            size="small"
-                          >
-                            <ArrowBackIcon />
-                          </IconButton>
-                        )}
-                        <Typography variant="body2" sx={{ mx: 2 }}>
-                          {`${sectionData.currentIndex + 1}/${totalVersions}`}
-                        </Typography>
-                        {!isLastVersion && (
-                          <IconButton
-                            onClick={() => handleVersionChange(key as keyof LessonContent, 'next')}
-                            size="small"
-                          >
-                            <ArrowForwardIcon />
-                          </IconButton>
-                        )}
-                      </Box>
-                    )}
-                  </Box>
-                  <Paper 
-                    elevation={0} 
-                    sx={{ 
-                      p: 2, 
-                      backgroundColor: 'grey.50',
-                      minHeight: '100px',
-                      '& p': { margin: '0.5em 0' },
-                      '& h1, & h2, & h3, & h4, & h5, & h6': { 
-                        margin: '1em 0 0.5em 0',
-                        color: 'primary.main',
-                        fontWeight: 'bold' 
-                      },
-                      '& strong': { 
-                        fontWeight: 'bold',
-                        color: 'text.primary',
-                        display: 'block',
-                        marginTop: '1em'
-                      },
-                      '& em': { fontStyle: 'italic' },
-                      '& ul, & ol': { 
-                        marginTop: 1, 
-                        marginBottom: 1,
-                        paddingLeft: '1.5em'
-                      },
-                      '& li': { 
-                        margin: '0.5em 0',
-                        lineHeight: 1.6
-                      },
-                      '& blockquote': {
-                        borderLeft: '4px solid',
-                        borderColor: 'primary.main',
-                        paddingLeft: 2,
-                        margin: '1em 0',
-                        color: 'text.secondary'
-                      },
-                      '& code': {
-                        backgroundColor: 'grey.100',
-                        padding: '0.2em 0.4em',
-                        borderRadius: '4px',
-                        fontFamily: 'monospace'
-                      }
-                    }}
-                  >
-                    <ReactMarkdown>{content || 'No content generated yet...'}</ReactMarkdown>
-                  </Paper>
+            return (
+              <Box key={key} sx={{ mb: 4, position: 'relative' }}>
+                <Box sx={{ 
+                  display: 'flex', 
+                  justifyContent: 'space-between', 
+                  alignItems: 'center', 
+                  mb: 2 
+                }}>
+                  <Typography variant="h6" sx={{ color: 'primary.main' }}>
+                    {MODIFY_SECTIONS.find(s => s.value === key)?.label}
+                  </Typography>
+                  {hasVersions && totalVersions > 1 && (
+                    <Box sx={{ 
+                      display: 'flex', 
+                      alignItems: 'center', 
+                      gap: 1 
+                    }}>
+                      {!isFirstVersion && (
+                        <IconButton
+                          onClick={() => handleVersionChange(sectionKey, 'prev')}
+                          size="small"
+                        >
+                          <ArrowBackIcon />
+                        </IconButton>
+                      )}
+                      <Typography variant="body2" sx={{ mx: 2 }}>
+                        {`${historyData.currentIndex + 1}/${totalVersions}`}
+                      </Typography>
+                      {!isLastVersion && (
+                        <IconButton
+                          onClick={() => handleVersionChange(sectionKey, 'next')}
+                          size="small"
+                        >
+                          <ArrowForwardIcon />
+                        </IconButton>
+                      )}
+                    </Box>
+                  )}
                 </Box>
-              );
-            })}
-          </Box>
+
+                <Paper 
+                  elevation={0} 
+                  sx={{ 
+                    p: 2, 
+                    backgroundColor: 'grey.50',
+                    minHeight: '100px',
+                    '& p': { margin: '0.5em 0' },
+                    '& h1, & h2, & h3, & h4, & h5, & h6': { 
+                      margin: '1em 0 0.5em 0',
+                      color: 'primary.main',
+                      fontWeight: 'bold' 
+                    },
+                    '& strong': { 
+                      fontWeight: 'bold',
+                      color: 'text.primary',
+                      display: 'block',
+                      marginTop: '1em'
+                    },
+                    '& em': { fontStyle: 'italic' },
+                    '& ul, & ol': { 
+                      marginTop: 1, 
+                      marginBottom: 1,
+                      paddingLeft: '1.5em'
+                    },
+                    '& li': { 
+                      margin: '0.5em 0',
+                      lineHeight: 1.6
+                    },
+                    '& blockquote': {
+                      borderLeft: '4px solid',
+                      borderColor: 'primary.main',
+                      paddingLeft: 2,
+                      margin: '1em 0',
+                      color: 'text.secondary'
+                    },
+                    '& code': {
+                      backgroundColor: 'grey.100',
+                      padding: '0.2em 0.4em',
+                      borderRadius: '4px',
+                      fontFamily: 'monospace'
+                    }
+                  }}
+                >
+                  <ReactMarkdown>{content || 'No content generated yet...'}</ReactMarkdown>
+                </Paper>
+
+                {content && (
+                  <PromptBox
+                    value={sectionPrompts[key]}
+                    onChange={(value) => handleSectionPromptChange(key, value)}
+                    onSubmit={() => handleIndividualSectionModify(sectionKey)}
+                    isLoading={isModifying}
+                    placeholder={`Enter modifications for ${MODIFY_SECTIONS.find(s => s.value === key)?.label}...`}
+                    label="Modify this section"
+                  />
+                )}
+              </Box>
+            );
+          })}
         </Box>
       </Box>
 
