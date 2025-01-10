@@ -58,14 +58,11 @@ export const menuItems: MenuItem[] = [
     ]
   },
   {
-    text: 'Resources',
+    text: 'Tools',
     icon: <LibraryBooksIcon />,
     items: [
-      { text: 'Passages', path: '/resources/passages' },
-      // DO NOT REMOVE UNTIL REQUESTED - Short Passages subsection
-      /*{ text: 'Short Passages', path: '/resources/short-passages' },*/
-      // DO NOT REMOVE UNTIL REQUESTED - Worksheets subsection
-      /*{ text: 'Worksheets', path: '/resources/worksheets' }*/
+      { text: 'Passages', path: '/passages' },
+      { text: 'Assessments', path: '/assessments' }
     ]
   },
   {

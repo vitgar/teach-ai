@@ -337,13 +337,17 @@ const Passages: React.FC = () => {
                 if (teacher?._id) {
                   try {
                     const title = streamedContent.split('\n')[0].replace(/^# /, '').replace(/\*\*/g, '');
+                    const token = localStorage.getItem('token');
+                    if (!token) {
+                      throw new Error('No authentication token found');
+                    }
+
                     const response = await fetch('http://localhost:5000/api/passages', {
                       method: 'POST',
                       headers: {
                         'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${localStorage.getItem('token')}`,
+                        'Authorization': `Bearer ${token}`,
                       },
-                      credentials: 'include',
                       body: JSON.stringify({
                         teacherId: teacher._id,
                         title,
@@ -353,7 +357,12 @@ const Passages: React.FC = () => {
                         isAIGenerated: true,
                         includeAnswerKey: showAnswerKey,
                         answerKey: formattedAnswerKey,
-                        questions
+                        questions: questions.map(q => ({
+                          question: q.question,
+                          answers: q.answers,
+                          correctAnswer: q.correctAnswer || q.answers[0],
+                          explanation: q.explanation || ''
+                        }))
                       }),
                     });
 
@@ -362,10 +371,13 @@ const Passages: React.FC = () => {
                       setSavedPassageId(savedPassage._id);
                       console.log('Passage saved successfully with ID:', savedPassage._id);
                     } else {
-                      console.error('Failed to save passage:', await response.json());
+                      const errorData = await response.json();
+                      console.error('Failed to save passage:', errorData);
+                      setError(errorData.error || 'Failed to save passage');
                     }
                   } catch (error) {
                     console.error('Error auto-saving passage:', error);
+                    setError('Failed to save passage. Please try again.');
                   }
                 }
               }
@@ -997,6 +1009,51 @@ const Passages: React.FC = () => {
         </form>
       </Paper>
 
+      {streamedContent && questions.length > 0 && (
+        <Grid container spacing={2}>
+          <Grid item xs={12}>
+            <StreamingPassage
+              passage={streamedContent}
+              questions={questions}
+              isLoading={isLoading}
+            />
+            <Box sx={{ mt: 2, display: 'flex', justifyContent: 'flex-end', gap: 3 }}>
+              <Button
+                variant="contained"
+                startIcon={<PrintIcon />}
+                onClick={handlePrint}
+                disabled={!streamedContent}
+              >
+                Print
+              </Button>
+              
+              <Button
+                variant="contained"
+                startIcon={<DownloadIcon />}
+                onClick={handleDownloadClick}
+                disabled={!streamedContent}
+                aria-controls="download-menu"
+                aria-haspopup="true"
+              >
+                Download
+              </Button>
+            </Box>
+          </Grid>
+          {showAnswerKey && answerKey && (
+            <Grid item xs={12}>
+              <Paper elevation={3} sx={{ p: 2, mt: 2 }}>
+                <Typography variant="h6" gutterBottom>
+                  Answer Key
+                </Typography>
+                <div style={{ whiteSpace: 'pre-line' }}>
+                  {answerKey}
+                </div>
+              </Paper>
+            </Grid>
+          )}
+        </Grid>
+      )}
+
       {(isStreaming || streamedContent) && !questions.length && (
         <>
           <StreamingPassage
@@ -1028,44 +1085,6 @@ const Passages: React.FC = () => {
             </Box>
           )}
         </>
-      )}
-
-      {streamedContent && questions.length > 0 && (
-        <Grid container spacing={2}>
-          <Grid item xs={12} md={showAnswerKey ? 8 : 12}>
-            <StreamingPassage
-              passage={streamedContent}
-              questions={questions}
-              isLoading={isLoading}
-            />
-          </Grid>
-          {showAnswerKey && questions.length > 0 && (
-            <Grid item xs={12} md={4}>
-              <AnswerKey questions={questions} />
-              {/* Debug info */}
-              {process.env.NODE_ENV === 'development' && (
-                <Box sx={{ mt: 2, p: 2, bgcolor: '#f5f5f5' }}>
-                  <Typography variant="caption" component="div">
-                    Debug Info:
-                  </Typography>
-                  <Typography variant="caption" component="div">
-                    Questions: {questions.length}
-                  </Typography>
-                  <Typography variant="caption" component="div">
-                    Show Answer Key: {showAnswerKey.toString()}
-                  </Typography>
-                  <Typography variant="caption" component="div">
-                    Generate Questions: {generateQuestions.toString()}
-                  </Typography>
-                  {/* Add answer key debug info */}
-                  <Typography variant="caption" component="div">
-                    Answer Key Present: {Boolean(answerKey).toString()}
-                  </Typography>
-                </Box>
-              )}
-            </Grid>
-          )}
-        </Grid>
       )}
 
       <Menu

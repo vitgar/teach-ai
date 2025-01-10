@@ -385,22 +385,16 @@ const LessonPlan = () => {
             try {
               const data = JSON.parse(line.slice(5));
               
-              if (data.type === 'story' || data.type === 'title') {
-                // For story generation
+              if (data.content) {
                 accumulatedContent += data.content;
                 setContent(accumulatedContent);
-              } else if (data.type === 'complete') {
-                // For final content
+              }
+
+              if (data.type === 'complete') {
                 if (data.content) {
                   setContent(data.content);
-                } else if (data.title && data.content) {
-                  // Handle story completion
-                  setContent(data.content);
                 }
-              } else if (data.content) {
-                // For other streaming content
-                accumulatedContent += data.content;
-                setContent(accumulatedContent);
+                return accumulatedContent;
               }
             } catch (e) {
               console.error('Error parsing SSE data:', e);
@@ -408,6 +402,7 @@ const LessonPlan = () => {
           }
         }
       }
+      return accumulatedContent;
     } catch (error) {
       console.error('Error in streaming response:', error);
       throw error;
@@ -418,12 +413,21 @@ const LessonPlan = () => {
     if (!selectedStandard || !lexileLevel) return;
     
     setIsGeneratingStory(true);
+    // Clear all content when starting new generation
+    setStory(null);
+    setLessonContent({
+      warmUp: '',
+      introduction: '',
+      guidedPractice: '',
+      writingComprehension: ''
+    });
+    setBookTitle('');
+    
     try {
       const topicToUse = selectedStandard 
         ? standards.find(s => s._id === selectedStandard)?.description || ''
         : focus;
 
-      // First generate and save the story
       const response = await fetch(`${aiAxiosInstance.defaults.baseURL}/generate-story`, {
         method: 'POST',
         headers: {
@@ -443,9 +447,8 @@ const LessonPlan = () => {
         throw new Error('Failed to get reader');
       }
 
-      let storyContent = '';
-      let storyTitle = '';
-      let newStory: Story | null = null;
+      let accumulatedContent = '';
+      let currentTitle = '';
 
       while (true) {
         const { done, value } = await reader.read();
@@ -459,26 +462,35 @@ const LessonPlan = () => {
             try {
               const data = JSON.parse(line.slice(5));
               
-              if (data.type === 'story') {
-                storyContent += data.content;
-                setStory(prev => ({
-                  title: prev?.title || '',
-                  content: storyContent
-                }));
-              } else if (data.type === 'title') {
-                storyTitle += data.content;
-                setBookTitle(storyTitle);
-                setStory(prev => ({
-                  title: storyTitle,
-                  content: prev?.content || ''
-                }));
-              } else if (data.type === 'complete') {
-                newStory = {
-                  title: data.title,
-                  content: data.content
+              if (data.content) {
+                accumulatedContent += data.content;
+                setStory({
+                  title: currentTitle,
+                  content: accumulatedContent
+                });
+              }
+              
+              if (data.title) {
+                currentTitle = data.title;
+                setBookTitle(currentTitle);
+                setStory({
+                  title: currentTitle,
+                  content: accumulatedContent
+                });
+              }
+
+              if (data.type === 'complete') {
+                const newStory = {
+                  title: currentTitle || data.title || '',
+                  content: data.content || accumulatedContent
                 };
                 setStory(newStory);
-                setBookTitle(data.title);
+                setBookTitle(newStory.title);
+
+                // Only proceed with generating other sections if we have a story
+                if (newStory.content) {
+                  await generateOtherSections(newStory, topicToUse);
+                }
               }
             } catch (e) {
               console.error('Error parsing SSE data:', e);
@@ -486,104 +498,156 @@ const LessonPlan = () => {
           }
         }
       }
-
-      // Only proceed with generating other sections if we have a story
-      if (newStory) {
-        const story = newStory; // Create a non-null reference
-        // Set initial loading state for all sections
-        setLessonContent(prev => ({
-          ...prev,
-          warmUp: 'Generating...',
-          introduction: 'Generating...',
-          guidedPractice: 'Generating...',
-          writingComprehension: 'Generating...'
-        }));
-
-        try {
-          // Generate warm-up, introduction, and practice in parallel
-          const [warmUpResult, introResult, practiceResult] = await Promise.all([
-            // Generate warm-up
-            new Promise<string>(async (resolve) => {
-              await handleStreamingResponse(
-                '/generate-warmup',
-                {
-                  topic: topicToUse,
-                  storyTitle: story.title,
-                  storyContent: story.content
-                },
-                'warmUp',
-                (content) => {
-                  setLessonContent(prev => ({ ...prev, warmUp: content }));
-                  resolve(content);
-                }
-              );
-            }),
-
-            // Generate introduction
-            new Promise<string>(async (resolve) => {
-              await handleStreamingResponse(
-                '/generate-guided-reading-intro',
-                {
-                  title: story.title,
-                  content: story.content,
-                  skill: topicToUse
-                },
-                'introduction',
-                (content) => {
-                  setLessonContent(prev => ({ ...prev, introduction: content }));
-                  resolve(content);
-                }
-              );
-            }),
-
-            // Generate practice
-            new Promise<string>(async (resolve) => {
-              await handleStreamingResponse(
-                '/generate-practice',
-                {
-                  skill: topicToUse,
-                  storyTitle: story.title,
-                  storyContent: story.content
-                },
-                'guidedPractice',
-                (content) => {
-                  setLessonContent(prev => ({ ...prev, guidedPractice: content }));
-                  resolve(content);
-                }
-              );
-            })
-          ]);
-
-          // After practice content is available, generate exit ticket
-          if (practiceResult) {
-            await handleStreamingResponse(
-              '/generate-exit-ticket',
-              {
-                storyTitle: story.title,
-                storyContent: story.content,
-                skill: topicToUse,
-                practiceContent: practiceResult
-              },
-              'writingComprehension',
-              (content) => setLessonContent(prev => ({ ...prev, writingComprehension: content }))
-            );
-          } else {
-            console.error('Practice content not available for exit ticket generation');
-            setError('Failed to generate exit ticket: Practice content not available');
-          }
-
-        } catch (error) {
-          console.error('Error generating sections:', error);
-          setError('Failed to generate one or more sections');
-        }
-      }
-
     } catch (error) {
       console.error('Error generating content:', error);
       setError('Failed to generate content');
     } finally {
       setIsGeneratingStory(false);
     }
+  };
+
+  const generateOtherSections = async (story: Story, topicToUse: string) => {
+    try {
+      // Set initial empty state for sections
+      setLessonContent(prev => ({
+        ...prev,
+        warmUp: '',
+        introduction: '',
+        guidedPractice: '',
+        writingComprehension: ''
+      }));
+
+      // Create a single streaming connection for parallel generation
+      const response = await fetch(`${aiAxiosInstance.defaults.baseURL}/generate-parallel`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          warmUp: {
+            topic: topicToUse,
+            storyTitle: story.title,
+            storyContent: story.content
+          },
+          introduction: {
+            title: story.title,
+            content: story.content,
+            skill: topicToUse
+          },
+          practice: {
+            skill: topicToUse,
+            storyTitle: story.title,
+            storyContent: story.content
+          }
+        })
+      });
+
+      const reader = response.body?.getReader();
+      const decoder = new TextDecoder();
+
+      if (!reader) {
+        throw new Error('Failed to get reader');
+      }
+
+      let practiceContent = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        const chunk = decoder.decode(value);
+        const lines = chunk.split('\n');
+        
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            try {
+              const data = JSON.parse(line.slice(5));
+              
+              // Update the appropriate section based on the source
+              if (data.source === 'warmUp' && data.content) {
+                setLessonContent(prev => ({
+                  ...prev,
+                  warmUp: prev.warmUp + data.content
+                }));
+              } else if (data.source === 'introduction' && data.content) {
+                setLessonContent(prev => ({
+                  ...prev,
+                  introduction: prev.introduction + data.content
+                }));
+              } else if (data.source === 'practice' && data.content) {
+                practiceContent += data.content;
+                setLessonContent(prev => ({
+                  ...prev,
+                  guidedPractice: practiceContent
+                }));
+              }
+
+              if (data.type === 'complete' && data.source === 'practice') {
+                // After all parallel sections are complete, generate checking comprehension
+                await handleStreamingResponse(
+                  '/generate-exit-ticket',
+                  {
+                    storyTitle: story.title,
+                    storyContent: story.content,
+                    skill: topicToUse,
+                    practiceContent: practiceContent
+                  },
+                  'writingComprehension',
+                  (content) => setLessonContent(prev => ({ ...prev, writingComprehension: content }))
+                );
+              }
+            } catch (e) {
+              console.error('Error parsing SSE data:', e);
+            }
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Error generating sections:', error);
+      setError('Failed to generate one or more sections');
+    }
+  };
+
+  const processStream = async (response: Response, setContent: (content: string) => void) => {
+    const reader = response.body?.getReader();
+    const decoder = new TextDecoder();
+
+    if (!reader) {
+      throw new Error('Failed to get reader');
+    }
+
+    let accumulatedContent = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      const chunk = decoder.decode(value);
+      const lines = chunk.split('\n');
+      
+      for (const line of lines) {
+        if (line.startsWith('data: ')) {
+          try {
+            const data = JSON.parse(line.slice(5));
+            
+            if (data.content) {
+              accumulatedContent += data.content;
+              setContent(accumulatedContent);
+            }
+
+            if (data.type === 'complete') {
+              if (data.content) {
+                setContent(data.content);
+              }
+              return accumulatedContent;
+            }
+          } catch (e) {
+            console.error('Error parsing SSE data:', e);
+          }
+        }
+      }
+    }
+    return accumulatedContent;
   };
 
   const handleSectionPromptChange = (section: string, value: string) => {
@@ -1382,10 +1446,10 @@ ${selectedStandard ? `
           },
         }}>
           {/* Generated Story Section */}
-          {story && (
+          {(story || isGeneratingStory) && (
             <Box sx={{ mb: 4 }}>
               <Typography variant="h6" sx={{ color: 'primary.main', mb: 2 }}>
-                Generated Story
+                {isGeneratingStory ? 'Generating Story...' : 'Story'}
               </Typography>
               <Paper 
                 elevation={0} 
@@ -1396,8 +1460,8 @@ ${selectedStandard ? `
                   '& p': { margin: '0.5em 0' }
                 }}
               >
-                <Typography variant="h6" gutterBottom>{story.title}</Typography>
-                <ReactMarkdown>{story.content}</ReactMarkdown>
+                {story?.title && <Typography variant="h6" gutterBottom>{story.title}</Typography>}
+                <ReactMarkdown>{story?.content || ''}</ReactMarkdown>
               </Paper>
             </Box>
           )}

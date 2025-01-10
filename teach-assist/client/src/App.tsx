@@ -29,6 +29,8 @@ import LinkedInCallback from './Components/Auth/LinkedInCallback';
 import AuthCallback from './Components/AuthCallback';
 import Subscription from './Components/Subscription/Subscription';
 import SubscriptionSuccess from './Components/Subscription/SubscriptionSuccess';
+import Assessments from './Components/Resources/Assessments';
+import Tools from './Components/Resources/Tools';
 
 
 function App() {
@@ -190,6 +192,13 @@ function App() {
             </PrivateRoute>
           } />
           <Route path="/auth/callback" element={<AuthCallback />} />
+          <Route path="/tools" element={
+            <PrivateRoute>
+              <Tools />
+            </PrivateRoute>
+          } />
+          <Route path="/passages" element={<Passages />} />
+          <Route path="/assessments" element={<Assessments />} />
 
           {/* Default redirect */}
           <Route path="/" element={

@@ -63,7 +63,7 @@ const StreamingPassage: React.FC<StreamingPassageProps> = ({
             {passageContent}
           </ReactMarkdown>
         </div>
-        {formattedQuestions && (
+        {formattedQuestions && questions.length > 0 && (
           <>
             <h2 className="questions-title">Questions</h2>
             <div className="questions" dangerouslySetInnerHTML={{ __html: formattedQuestions }} />
