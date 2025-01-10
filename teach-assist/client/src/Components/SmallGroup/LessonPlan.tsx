@@ -517,91 +517,55 @@ const LessonPlan = () => {
         writingComprehension: ''
       }));
 
-      // Create a single streaming connection for parallel generation
-      const response = await fetch(`${aiAxiosInstance.defaults.baseURL}/generate-parallel`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
+      // Generate warm-up
+      await handleStreamingResponse(
+        '/generate-warmup',
+        {
+          topic: topicToUse,
+          storyTitle: story.title,
+          storyContent: story.content
         },
-        body: JSON.stringify({
-          warmUp: {
-            topic: topicToUse,
-            storyTitle: story.title,
-            storyContent: story.content
-          },
-          introduction: {
-            title: story.title,
-            content: story.content,
-            skill: topicToUse
-          },
-          practice: {
-            skill: topicToUse,
-            storyTitle: story.title,
-            storyContent: story.content
-          }
-        })
-      });
+        'warmUp',
+        (content) => setLessonContent(prev => ({ ...prev, warmUp: content }))
+      );
 
-      const reader = response.body?.getReader();
-      const decoder = new TextDecoder();
+      // Generate introduction
+      await handleStreamingResponse(
+        '/generate-guided-reading-intro',
+        {
+          title: story.title,
+          content: story.content,
+          skill: topicToUse
+        },
+        'introduction',
+        (content) => setLessonContent(prev => ({ ...prev, introduction: content }))
+      );
 
-      if (!reader) {
-        throw new Error('Failed to get reader');
-      }
+      // Generate practice
+      const practiceContent = await handleStreamingResponse(
+        '/generate-practice',
+        {
+          skill: topicToUse,
+          storyTitle: story.title,
+          storyContent: story.content
+        },
+        'guidedPractice',
+        (content) => setLessonContent(prev => ({ ...prev, guidedPractice: content }))
+      );
 
-      let practiceContent = '';
+      // Generate checking comprehension
+      await handleStreamingResponse(
+        '/generate-exit-ticket',
+        {
+          storyTitle: story.title,
+          storyContent: story.content,
+          skill: topicToUse,
+          practiceContent: practiceContent
+        },
+        'writingComprehension',
+        (content) => setLessonContent(prev => ({ ...prev, writingComprehension: content }))
+      );
 
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        const chunk = decoder.decode(value);
-        const lines = chunk.split('\n');
-        
-        for (const line of lines) {
-          if (line.startsWith('data: ')) {
-            try {
-              const data = JSON.parse(line.slice(5));
-              
-              // Update the appropriate section based on the source
-              if (data.source === 'warmUp' && data.content) {
-                setLessonContent(prev => ({
-                  ...prev,
-                  warmUp: prev.warmUp + data.content
-                }));
-              } else if (data.source === 'introduction' && data.content) {
-                setLessonContent(prev => ({
-                  ...prev,
-                  introduction: prev.introduction + data.content
-                }));
-              } else if (data.source === 'practice' && data.content) {
-                practiceContent += data.content;
-                setLessonContent(prev => ({
-                  ...prev,
-                  guidedPractice: practiceContent
-                }));
-              }
-
-              if (data.type === 'complete' && data.source === 'practice') {
-                // After all parallel sections are complete, generate checking comprehension
-                await handleStreamingResponse(
-                  '/generate-exit-ticket',
-                  {
-                    storyTitle: story.title,
-                    storyContent: story.content,
-                    skill: topicToUse,
-                    practiceContent: practiceContent
-                  },
-                  'writingComprehension',
-                  (content) => setLessonContent(prev => ({ ...prev, writingComprehension: content }))
-                );
-              }
-            } catch (e) {
-              console.error('Error parsing SSE data:', e);
-            }
-          }
-        }
-      }
     } catch (error) {
       console.error('Error generating sections:', error);
       setError('Failed to generate one or more sections');
