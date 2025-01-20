@@ -850,7 +850,7 @@
 
 # # # Example model dictionary
 # # ENDPOINT_MODELS = {
-# #     "chat": "gpt-4"  # or "gpt-3.5-turbo"
+# #     "chat": "gpt-4o"  # or "gpt-3.5-turbo"
 # # }
 
 # @app.route('/chat', methods=['POST'])

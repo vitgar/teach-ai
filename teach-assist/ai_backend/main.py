@@ -2,7 +2,7 @@
 
 from fastapi import FastAPI, HTTPException, Header, Depends, Request
 from starlette.responses import StreamingResponse, JSONResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, model_validator
 from fastapi.middleware.cors import CORSMiddleware
 from lesson_plan_generator import send_request_to_openai
 import openai
@@ -14,6 +14,9 @@ from openai import OpenAI
 import json
 import logging
 import asyncio
+from pymongo import MongoClient
+from datetime import datetime
+import re
 
 # Load environment variables from a .env file
 load_dotenv()
@@ -219,14 +222,29 @@ class Standard(BaseModel):
     standard: str
     description: str
 
-class GenerateAssessmentRequest(BaseModel):
+class PassageData(BaseModel):
     topic: str
-    reading_level: str
+    genre: str = "Informational"
+
+class GenerateAssessmentRequest(BaseModel):
     genre: str = "Informational"
     generateQuestions: bool = False
     questionStyle: str = "STAAR"
     includeAnswerKey: bool = False
     standards: list[Standard] = []
+    isPairedPassage: bool = False
+    topic: str | None = None
+    passages: list[PassageData] | None = None
+
+    @model_validator(mode='before')
+    def validate_passage_data(cls, values):
+        if values.get('isPairedPassage'):
+            if not values.get('passages') or len(values.get('passages', [])) != 2:
+                raise ValueError('Paired passage requires exactly two passages')
+        else:
+            if not values.get('topic'):
+                raise ValueError('Single passage requires a topic')
+        return values
 
 class GenerateAssessmentResponse(BaseModel):
     assessment: str
@@ -245,11 +263,14 @@ class ChatResponse(BaseModel):
 
 class GeneratePassageRequest(BaseModel):
     topic: str
-    reading_level: str
     genre: str = "Informational"
+    reading_level: str
     generateQuestions: bool = False
     questionStyle: str = "STAAR"
     includeAnswerKey: bool = False
+    passage: str | None = None
+    lexileLevel: str | None = None
+    isAIGenerated: bool = True
 
 class GenerateGuidedReadingIntroRequest(BaseModel):
     title: str
@@ -315,145 +336,68 @@ async def root():
 @app.post("/generate-passage")
 async def generate_passage(request: GeneratePassageRequest):
     """
-    Generate a reading passage with optional questions based on the specified parameters.
+    Generate a passage with optional questions and answer key.
     """
-    print("Received data:", request.dict())
-    print("Initial reading level:", request.reading_level)
-
-    async def generate():
-        try:
-            print("Processing reading level:", request.reading_level)
-            
-            # Get specifications based on reading level
-            spec = LEXILE_SPECIFICATIONS.get(request.reading_level)
-            if not spec:
-                raise ValueError(f"Reading level '{request.reading_level}' is not supported.")
-            
-            # Use the range from specifications
-            lexile_range = spec["range"]
-            category = spec["category"]
-            num_paragraphs = spec["paragraphs"]
-            word_count = spec["word_count"]
-
-            # Define paragraph instructions
-            paragraph_instructions = f"Include exactly {num_paragraphs} cohesive paragraphs, each containing approximately {word_count}."
-
-            # Create genre-specific guidance
-            genre_guidance = {
-                'Fiction': 'Create a narrative with strong character development, a coherent plot, and vivid sensory details.',
-                'Historical Fiction': 'Blend accurate historical facts with an engaging narrative that brings the past to life.',
-                'Science Fiction': 'Incorporate scientific or technological concepts suitable for the Lexile level, focusing on imagination and curiosity.',
-                'Informational': 'Present factual, well-structured information that clearly explains the topic and provides key details.',
-                'Expository': 'Offer a clear, logical explanation of the topic, supported by relevant facts and examples.',
-                'Persuasive': 'Present a reasoned argument with evidence, guiding readers towards a particular stance or conclusion.'
-            }.get(request.genre, 'Create an engaging passage that effectively addresses the given topic.')
-
-            # Adjust technical requirements based on Lexile specifications
-            if category == 'elementary':
+    try:
+        async def generate():
+            try:
+                print("Initial reading level:", request.reading_level)
+                
+                # Get specifications for the reading level
+                specs = LEXILE_SPECIFICATIONS.get(request.reading_level, LEXILE_SPECIFICATIONS["700-800"])
+                category = specs["category"]
+                
+                # Get genre guidance
+                genre_guidance = GENRE_GUIDANCE.get(request.genre, GENRE_GUIDANCE['Informational'])
+                
+                # Set technical requirements based on reading level
                 technical_requirements = f"""
-- Maintain an approximate Lexile level of {request.reading_level}.
-- Use simple and clear language appropriate for this reading level.
-- {paragraph_instructions}
-- Ensure precise organization and a polished tone.
-- Follow standard test passage formatting conventions (e.g., a clear, bold title; well-structured paragraphs).
-"""
-            elif category == 'middle':
-                technical_requirements = f"""
-- Maintain an approximate Lexile level of {request.reading_level}.
-- Use clear, coherent, and engaging language appropriate for this reading level.
-- {paragraph_instructions}
-- Include descriptive details and logical transitions between ideas.
-- Ensure precise organization, logical progression of ideas, and a polished tone.
-- Follow standard test passage formatting conventions (e.g., a clear, bold title; well-structured paragraphs).
-"""
-            else:  # high
-                technical_requirements = f"""
-- Maintain an approximate Lexile level of {request.reading_level}.
-- Use sophisticated language that is clear, coherent, and engaging.
-- {paragraph_instructions}
-- Include vivid descriptive details, strong transitions between ideas, and a well-structured narrative or informational flow.
-- Incorporate subtle figurative language, relevant examples, and carefully chosen vocabulary.
-- Ensure precise organization, logical progression of ideas, and a polished tone.
-- Follow standard test passage formatting conventions (e.g., a clear, bold title; well-structured paragraphs).
-"""
+                - {specs['paragraphs']} paragraphs
+                - {specs['word_count']} total
+                - Lexile range: {specs['range']}
+                - Clear topic sentences
+                - Appropriate transitions
+                - Grade-level vocabulary
+                """
+                
+                # Set question guidance if needed
+                question_guidance = """
+                Questions Requirements:
+                - Each question must assess comprehension
+                - Include a mix of literal and inferential questions
+                - Use grade-appropriate vocabulary
+                - Each question must have 4 answer choices (A-D)
+                - Distractors should be plausible but clearly incorrect
+                """ if request.generateQuestions else ""
+                
+                # Set answer key guidance if needed
+                answer_key_guidance = """
+                Answer Key Requirements:
+                - Provide the correct answer (A, B, C, or D)
+                - Include a detailed explanation
+                - Reference specific text evidence
+                """ if request.generateQuestions and request.includeAnswerKey else ""
+                
+                # Construct the prompt
+                prompt = f"""Generate a {request.genre} passage about "{request.topic}" at a {request.reading_level} Lexile level.
+                The passage should be presented in a standardized test format and maintain appropriate complexity for {request.reading_level} Lexile level readers.
 
-            # Create question guidance based on question style
-            question_guidance = ""
-            answer_key_guidance = ""
-            if request.generateQuestions:
-                if request.questionStyle.upper() == "STAAR":
-                    question_guidance = """
-After the passage, include 4-5 STAAR-style questions that:
-- Follow the exact STAAR format with specific question stems
-- Align to Lexile-level readiness and supporting standards
-- Include a balanced mix of:
-    * Key Ideas and Details (main idea, inference, character analysis)
-    * Author's Purpose and Craft (understanding text structure, point of view, and author's choices)
-    * Integration of Knowledge and Ideas (using evidence, making connections, analyzing information)
-- Use academic and precise vocabulary such as "central idea," "text structure," "according to the passage," and "which sentence"
-- Provide four answer choices (A-D) with plausible distractors representing common misconceptions
-- Maintain STAAR-level rigor and complexity appropriate for state testing
+                Genre-specific requirements:
+                {genre_guidance}
 
-Format each question exactly like this:
-1. [Question text]
-   A. [Answer choice]
-   B. [Answer choice]
-   C. [Answer choice]
-   D. [Answer choice]
-"""
-                else:  # Generic style
-                    question_guidance = """
-After the passage, include 4-5 comprehension questions that:
-- Focus on key comprehension skills (main idea, details, inference, etc.)
-- Use clear, straightforward language
-- Include a mix of literal and inferential questions
-- Provide four answer choices (A-D) with reasonable alternatives
-- Match the reading level and complexity of the passage
+                Technical requirements:
+                {technical_requirements}
 
-Format each question exactly like this:
-1. [Question text]
-   A. [Answer choice]
-   B. [Answer choice]
-   C. [Answer choice]
-   D. [Answer choice]
-"""
-                if request.includeAnswerKey:
-                    answer_key_guidance = """
-After the questions, include an answer key section marked with [[ANSWER_KEY_START]] on its own line, followed by:
-- The correct answer letter for each question
-- A detailed explanation for why each answer is correct
-- References to specific text evidence supporting each answer
+                {question_guidance if request.generateQuestions else ''}
+                {answer_key_guidance if request.generateQuestions and request.includeAnswerKey else ''}
 
-Format exactly like this:
-[[ANSWER_KEY_START]]
-Question 1: [Letter]
-[Detailed explanation with text evidence]
+                Return the content in this exact format:
 
-Question 2: [Letter]
-[Detailed explanation with text evidence]
+                # **[Title]**
 
-[etc...]"""
+                [Passage content with proper paragraphs]
 
-            # Construct the prompt
-            prompt = f"""Generate a {request.genre} passage about "{request.topic}" at a {request.reading_level} Lexile level.
-            The passage should be presented in a standardized test format and maintain appropriate complexity for {request.reading_level} Lexile level readers.
-
-            Genre-specific requirements:
-            {genre_guidance}
-
-            Technical requirements:
-            {technical_requirements}
-
-            {question_guidance if request.generateQuestions else ''}
-            {answer_key_guidance if request.generateQuestions and request.includeAnswerKey else ''}
-
-            Return the content in this exact format:
-
-            # **[Title]**
-
-            [Passage content with proper paragraphs]
-
-            {'''## Questions
+                {'''## Questions
 
 1. [Question text]
    A. [Answer choice]
@@ -469,7 +413,7 @@ Question 2: [Letter]
 
 [etc...]''' if request.generateQuestions else ''}
 
-            {'''[[ANSWER_KEY_START]]
+                {'''[[ANSWER_KEY_START]]
 **Answer Key**
 
 Question 1: [Letter]  
@@ -480,601 +424,85 @@ Explanation: [Detailed explanation]
 
 [etc...]''' if request.generateQuestions and request.includeAnswerKey else ''}"""
 
-            print("\n=== PROMPT SENT TO AI ===")
-            print(prompt)
-            print("========================\n")
+                # Generate the passage using OpenAI's API
+                client = OpenAI(api_key=openai_api_key)
+                response = client.chat.completions.create(
+                    model="gpt-4o",
+                    messages=[
+                        {
+                            "role": "system",
+                            "content": "You are an expert in creating educational assessment passages."
+                        },
+                        {
+                            "role": "user",
+                            "content": prompt
+                        }
+                    ],
+                    temperature=0.7,
+                    stream=True
+                )
 
-            # Generate the passage using OpenAI's API
-            client = OpenAI(api_key=openai_api_key)
-            response = client.chat.completions.create(
-                model="gpt-4",
-                messages=[
-                    {
-                        "role": "system",
-                        "content": "You are an expert in creating Lexile-appropriate reading passages with aligned questions."
-                    },
-                    {
-                        "role": "user",
-                        "content": prompt
-                    }
-                ],
-                temperature=0.7,
-                stream=True
-            )
+                content_buffer = ""
+                questions = []
+                current_question = None
+                question_text = ""
+                is_collecting_questions = False
+                is_collecting_answer_key = False
 
-            content_buffer = ""
-            for chunk in response:
-                if chunk.choices[0].delta.content is not None:
-                    text = chunk.choices[0].delta.content
-                    content_buffer += text
-                    yield f"data: {json.dumps({'type': 'content', 'content': text})}\n\n"
-
-                    # Check if we have a complete question section
-                    if '## Questions' in content_buffer and request.generateQuestions:
-                        questions_section = content_buffer.split('## Questions')[-1]
-                        if questions_section.count('\n1.') > 0:  # We have at least one complete question
-                            try:
-                                # Extract and format questions
-                                questions = []
-                                current_question = None
-                                for line in questions_section.split('\n'):
-                                    if line.strip().startswith(('[1-9]', '1.', '2.', '3.', '4.', '5.')):
-                                        if current_question:
-                                            questions.append(current_question)
-                                        current_question = {
-                                            'question': line.split('.', 1)[1].strip(),
-                                            'answers': [],
-                                            'correctAnswer': '',
-                                            'explanation': '',
-                                            'standardReference': ''
-                                        }
-                                    elif line.strip().startswith(('A.', 'B.', 'C.', 'D.')):
-                                        if current_question:
-                                            current_question['answers'].append(line.strip())
-                                    elif line.strip().startswith('Standard:') and current_question:
-                                        current_question['standardReference'] = line.replace('Standard:', '').strip()
-
-                                if current_question and current_question['answers']:
-                                    questions.append(current_question)
-
-                                if questions:
-                                    yield f"data: {json.dumps({'type': 'questions', 'questions': questions})}\n\n"
-                            except Exception as e:
-                                print(f"Error parsing questions: {str(e)}")
-
-            yield f"data: {json.dumps({'type': 'complete'})}\n\n"
-
-        except Exception as e:
-            print(f"Error generating passage: {e}")
-            yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
-
-    return StreamingResponse(
-        generate(),
-        media_type='text/event-stream'
-    )
-
-# Route to improve intervention notes
-@app.post("/improve-intervention", response_model=ImproveInterventionResponse)
-async def improve_intervention(request: ImproveInterventionRequest):
-    """
-    Improve the intervention text using OpenAI's GPT model.
-    """
-    try:
-        client = OpenAI(api_key=openai_api_key)
-        response = client.chat.completions.create(
-            model="gpt-4o",
-            messages=[
-                {
-                    "role": "system",
-                    "content": "You are an expert educator helping to improve intervention notes for clarity and effectiveness.",
-                },
-                {
-                    "role": "user",
-                    "content": f"Please improve the following intervention note for clarity and effectiveness:\n\n\"{request.text}\"",
-                },
-            ],
-            temperature=0.7,
-            max_tokens=150,
-        )
-
-        improved_text = response.choices[0].message.content.strip()
-        return ImproveInterventionResponse(improved_text=improved_text)
-
-    except Exception as e:
-        print(f"OpenAI API error: {e}")
-        raise HTTPException(status_code=500, detail="Failed to improve intervention text.")
-
-# Route to generate stories
-@app.post("/generate-story", response_model=GenerateStoryResponse)
-async def generate_story(request: GenerateStoryRequest):
-    """
-    Generate a story using OpenAI's GPT model.
-    """
-    try:
-        # Get word count and paragraphs based on lexile level
-        lexile = request.lexileLevel.replace('L', '').upper()  # Convert '200L' to '200'
-        
-        # Default values for unknown lexile levels
-        word_count = "100-150"
-        paragraphs = "1-2"
-        level = "Intermediate"
-        
-        # Map lexile levels to parameters
-        if lexile == "BR":
-            word_count = "20-30"
-            paragraphs = "1"
-            level = "Beginning Reader"
-        elif lexile == "200":
-            word_count = "30-50"
-            paragraphs = "1"
-            level = "Early Reader"
-        elif lexile == "300":
-            word_count = "50-70"
-            paragraphs = "1"
-            level = "Early Reader"
-        elif lexile == "400":
-            word_count = "70-90"
-            paragraphs = "1-2"
-            level = "Early Intermediate"
-        elif lexile == "500":
-            word_count = "90-110"
-            paragraphs = "1-2"
-            level = "Intermediate"
-        elif lexile == "600":
-            word_count = "110-130"
-            paragraphs = "1-2"
-            level = "Intermediate"
-        elif lexile == "700":
-            word_count = "130-150"
-            paragraphs = "1-2"
-            level = "Advanced"
-        elif lexile == "800":
-            word_count = "150-170"
-            paragraphs = "1-2"
-            level = "Advanced"
-        elif lexile == "900":
-            word_count = "170-190"
-            paragraphs = "1-2"
-            level = "Advanced"
-        elif lexile == "1000":
-            word_count = "190-200"
-            paragraphs = "1-2"
-            level = "Advanced"
-
-        prompt = f"""Generate a very short, engaging story based on the following prompt:
-        Topic: {request.prompt}
-        
-        Requirements:
-        1. Create {paragraphs} paragraph(s) with a total of {word_count} words
-        2. Make it engaging and age-appropriate for {level} level
-        3. Include a clear beginning, middle, and end
-        4. Focus on {request.prompt} without explicitly mentioning it
-        5. Use vocabulary appropriate for {level} level
-        6. Keep it concise but meaningful
-        7. Create a short, creative title that captures the main idea
-        
-        Format:
-        [Title]
-        
-        [Story content in {paragraphs} paragraph(s)]"""
-        
-        try:
-            client = OpenAI(api_key=openai_api_key)
-            response = client.chat.completions.create(
-                model="gpt-4o",
-                messages=[
-                    {
-                        "role": "system", 
-                        "content": f"""You are an expert at creating engaging educational stories at specific reading levels.
-                        Follow these rules exactly:
-                        1. Generate a short, creative title
-                        2. Add TWO blank lines after the title
-                        3. Write {paragraphs} paragraph(s)
-                        4. Total word count should be {word_count} words
-                        5. Use vocabulary suitable for {level} level
-                        6. Do not use any markdown headers or formatting
-                        7. Make sure the story has a clear beginning, middle, and end"""
-                    },
-                    {"role": "user", "content": prompt}
-                ],
-                temperature=0.7,
-                stream=True
-            )
-
-            async def generate():
-                story_text = ""
                 for chunk in response:
                     if chunk.choices[0].delta.content is not None:
-                        content = chunk.choices[0].delta.content
-                        story_text += content
-                        # Format the content as a proper SSE data message
-                        yield f"data: {json.dumps({'content': content})}\n\n"
-                
-                # Split the story text into title and content
-                parts = story_text.strip().split('\n\n', 1)
-                if len(parts) == 2:
-                    title, content = parts
-                    yield f"data: {json.dumps({'type': 'complete', 'title': title.strip(), 'content': content.strip()})}\n\n"
-                else:
-                    yield f"data: {json.dumps({'type': 'error', 'message': 'Failed to generate properly formatted story'})}\n\n"
+                        text = chunk.choices[0].delta.content
+                        
+                        if "## Questions" in text:
+                            is_collecting_questions = True
+                            yield f"data: {json.dumps({'type': 'content', 'content': text})}\n\n"
+                            continue
 
-            return StreamingResponse(generate(), media_type='text/event-stream')
+                        if "[[ANSWER_KEY_START]]" in text:
+                            is_collecting_answer_key = True
+                            is_collecting_questions = False
+                            yield f"data: {json.dumps({'type': 'content', 'content': text})}\n\n"
+                            continue
 
-        except Exception as api_error:
-            print(f"OpenAI API error: {str(api_error)}")
-            raise
+                        if is_collecting_questions:
+                            question_text += text
+                            # Parse questions as they come in
+                            lines = question_text.split('\n')
+                            for line in lines:
+                                line = line.strip()
+                                if line.startswith(('1.', '2.', '3.', '4.', '5.')):
+                                    if current_question and len(current_question['answers']) == 4:
+                                        questions.append(current_question)
+                                    current_question = {
+                                        'question': line.split('.', 1)[1].strip(),
+                                        'answers': [],
+                                        'correctAnswer': '',
+                                        'explanation': '',
+                                        'standardReference': ''
+                                    }
+                                elif line.startswith(('A.', 'B.', 'C.', 'D.')) and current_question:
+                                    current_question['answers'].append(line.strip())
+                                    if len(current_question['answers']) == 4:
+                                        questions.append(current_question)
+                                        current_question = None
+                                        yield f"data: {json.dumps({'type': 'questions', 'questions': questions})}\n\n"
+                            yield f"data: {json.dumps({'type': 'content', 'content': text})}\n\n"
+                        else:
+                            if not is_collecting_answer_key:
+                                content_buffer += text
+                            yield f"data: {json.dumps({'type': 'content', 'content': text})}\n\n"
 
-    except Exception as e:
-        print(f"Unexpected error: {e}")
-        raise HTTPException(status_code=500, detail="An unexpected error occurred.")
+                yield f"data: {json.dumps({'type': 'complete'})}\n\n"
 
-# Route to generate lesson plans
-@app.post("/generate-lesson-plan", response_model=GenerateLessonPlanResponse)
-async def generate_lesson_plan(request: GenerateLessonPlanRequest):
-    """
-    Generate a lesson plan using OpenAI's GPT model.
-    """
-    try:
-        prompt = f"""Generate a {request.lesson_type} lesson plan for grade {request.grade_level} on the topic: {request.topic}
-        {f'Align with these standards: {request.standards}' if request.standards else ''}
-        
-        Include the following sections:
-        ### Lesson Overview
-        - Grade Level
-        - Subject Area
-        - Duration
-        - Topic
-        
-        ### Learning Objectives
-        - What students will know
-        - What students will be able to do
-        
-        ### Materials Needed
-        - List all required materials
-        
-        ### Lesson Structure
-        1. Opening/Hook (5-10 minutes)
-        2. Main Activity (20-30 minutes)
-        3. Practice/Application (15-20 minutes)
-        4. Closure (5-10 minutes)
-        
-        ### Assessment Strategies
-        - How you will check for understanding
-        - Any specific assessment tasks
-        
-        ### Differentiation Strategies
-        - For struggling students
-        - For advanced students
-        - For ELL students
-        
-        ### Extensions and Homework
-        - Additional practice
-        - Related assignments
-        
-        Format the response in clear markdown with appropriate headers and sections."""
-        
-        try:
-            client = OpenAI(api_key=openai_api_key)
-            response = client.chat.completions.create(
-                model="gpt-4o",
-                messages=[
-                    {"role": "system", "content": "You are an expert teacher and curriculum developer."},
-                    {"role": "user", "content": prompt}
-                ],
-                temperature=0.7,
-                stream=True
-            )
-            
-            async def generate():
-                lesson_text = ""
-                for chunk in response:
-                    if chunk.choices[0].delta.content is not None:
-                        content = chunk.choices[0].delta.content
-                        lesson_text += content
-                        yield f"data: {json.dumps({'content': content})}\n\n"
-                yield f"data: {json.dumps({'type': 'complete', 'content': lesson_text})}\n\n"
+            except Exception as e:
+                print(f"Error generating passage: {e}")
+                yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
 
-            return StreamingResponse(generate(), media_type='text/event-stream')
-
-        except Exception as api_error:
-            print(f"OpenAI API error: {str(api_error)}")
-            raise
+        return StreamingResponse(generate(), media_type='text/event-stream')
 
     except Exception as e:
-        print(f"Unexpected error: {e}")
-        raise HTTPException(status_code=500, detail="An unexpected error occurred.")
-
-# Route to generate warmup activities
-@app.post("/generate-warmup")
-async def generate_warmup(request: GenerateWarmupRequest):
-    """
-    Generate a warmup activity using OpenAI's GPT model.
-    """
-    async def generate():
-        try:
-            prompt = f"""Create a focused 2-3 minute warm-up activity to prepare students for reading about {request.topic}.
-
-            Story Title: {request.storyTitle}
-            Story Content: {request.storyContent}
-            {f'Additional Requirements: {request.customPrompt}' if request.customPrompt else ''}
-
-            Format the response in markdown:
-            ### Warm-Up Activity: {request.topic}
-
-            **Time:** 2-3 minutes
-
-            **Learning Target:**
-            [Clear, measurable objective aligned with {request.topic}]
-
-            **Activity Steps:**
-            1. [Engaging opening aligned with reading level]
-            2. [Scaffolded practice of the skill]
-            3. [Quick formative check]
-
-            **Teacher Notes:**
-            - [Key vocabulary to pre-teach]
-            - [Potential misconceptions to address]
-            - [Differentiation suggestions]
-            - [Success criteria for the warm-up]
-            """
-
-            client = OpenAI(api_key=openai_api_key)
-            response = client.chat.completions.create(
-                model="gpt-4o",
-                messages=[
-                    {
-                        "role": "system", 
-                        "content": "You are an expert reading teacher creating focused, standards-aligned warm-up activities. Ensure activities are engaging, grade-appropriate, and directly prepare students for the lesson objective."
-                    },
-                    {"role": "user", "content": prompt}
-                ],
-                temperature=0.7,
-                stream=True
-            )
-            
-            content = ""
-            for chunk in response:
-                if chunk.choices[0].delta.content is not None:
-                    content += chunk.choices[0].delta.content
-                    yield f"data: {json.dumps({'content': chunk.choices[0].delta.content})}\n\n"
-
-            yield f"data: {json.dumps({'type': 'complete', 'content': content})}\n\n"
-                
-        except Exception as e:
-            print(f"Error generating warm-up: {str(e)}")
-            yield f"data: {json.dumps({'type': 'error', 'message': 'Failed to generate warm-up'})}\n\n"
-
-    return StreamingResponse(generate(), media_type='text/event-stream')
-
-# Route to generate assessments
-@app.post("/generate-assessment")
-async def generate_assessment(request: GenerateAssessmentRequest):
-    """
-    Generate an assessment using the same format as passages.
-    """
-    async def generate():
-        try:
-            # Get specifications based on reading level
-            level_specs = LEXILE_SPECIFICATIONS.get(request.reading_level.replace('L', '').upper(), {
-                "category": "middle",
-                "paragraphs": 4,
-                "word_count": "100 to 150 words",
-                "range": "500L to 600L"
-            })
-
-            category = level_specs["category"]
-            paragraph_instructions = f"Include {level_specs['paragraphs']} paragraphs with {level_specs['word_count']}"
-
-            # Create genre-specific guidance
-            genre_guidance = GENRE_GUIDANCE.get(request.genre, GENRE_GUIDANCE["Informational"])
-
-            # Create technical requirements based on reading level category
-            if category == 'elementary':
-                technical_requirements = f"""
-- Maintain an approximate Lexile level of {request.reading_level}.
-- Use simple, clear language appropriate for this reading level.
-- {paragraph_instructions}
-- Include basic descriptive details and clear transitions.
-- Ensure logical organization and flow of ideas.
-- Follow standard test passage formatting conventions (e.g., a clear, bold title; well-structured paragraphs).
-"""
-            elif category == 'middle':
-                technical_requirements = f"""
-- Maintain an approximate Lexile level of {request.reading_level}.
-- Use clear, coherent, and engaging language appropriate for this reading level.
-- {paragraph_instructions}
-- Include descriptive details and logical transitions between ideas.
-- Ensure precise organization, logical progression of ideas, and a polished tone.
-- Follow standard test passage formatting conventions (e.g., a clear, bold title; well-structured paragraphs).
-"""
-            else:  # high
-                technical_requirements = f"""
-- Maintain an approximate Lexile level of {request.reading_level}.
-- Use sophisticated language that is clear, coherent, and engaging.
-- {paragraph_instructions}
-- Include vivid descriptive details, strong transitions between ideas, and a well-structured narrative or informational flow.
-- Incorporate subtle figurative language, relevant examples, and carefully chosen vocabulary.
-- Ensure precise organization, logical progression of ideas, and a polished tone.
-- Follow standard test passage formatting conventions (e.g., a clear, bold title; well-structured paragraphs).
-"""
-
-            # Create question guidance based on question style
-            question_guidance = ""
-            answer_key_guidance = ""
-            if request.generateQuestions:
-                if request.questionStyle.upper() == "STAAR":
-                    question_guidance = f"""
-After the passage, include 4-5 STAAR-style questions that:
-- Follow the exact STAAR format with specific question stems
-- Align with the following standards:
-{chr(10).join([f'  * {std.standard}: {std.description}' for std in request.standards])}
-- Include a balanced mix of:
-    * Key Ideas and Details (main idea, inference, character analysis)
-    * Author's Purpose and Craft (understanding text structure, point of view, and author's choices)
-    * Integration of Knowledge and Ideas (using evidence, making connections, analyzing information)
-- Use academic and precise vocabulary such as "central idea," "text structure," "according to the passage," and "which sentence"
-- Provide four answer choices (A-D) with plausible distractors representing common misconceptions
-- Maintain STAAR-level rigor and complexity appropriate for state testing
-
-Format each question exactly like this:
-1. [Question text]
-   A. [Answer choice]
-   B. [Answer choice]
-   C. [Answer choice]
-   D. [Answer choice]
-"""
-                else:  # Generic style
-                    question_guidance = f"""
-After the passage, include 4-5 comprehension questions that:
-- Focus on key comprehension skills aligned with these standards:
-{chr(10).join([f'  * {std.standard}: {std.description}' for std in request.standards])}
-- Use clear, straightforward language
-- Include a mix of literal and inferential questions
-- Provide four answer choices (A-D) with reasonable alternatives
-- Match the reading level and complexity of the passage
-
-Format each question exactly like this:
-1. [Question text]
-   A. [Answer choice]
-   B. [Answer choice]
-   C. [Answer choice]
-   D. [Answer choice]
-"""
-                if request.includeAnswerKey:
-                    answer_key_guidance = """
-After the questions, include an answer key section marked with [[ANSWER_KEY_START]] on its own line, followed by:
-- The correct answer letter for each question
-- A detailed explanation for why each answer is correct
-- References to specific text evidence supporting each answer
-- The specific standard being assessed by each question
-
-Format exactly like this:
-[[ANSWER_KEY_START]]
-Question 1: [Letter]
-Standard: [Standard code and description]
-Explanation: [Detailed explanation with text evidence]
-
-Question 2: [Letter]
-Standard: [Standard code and description]
-Explanation: [Detailed explanation with text evidence]
-
-[etc...]"""
-
-            # Construct the prompt
-            prompt = f"""Generate an assessment passage about "{request.topic}" at a {request.reading_level} Lexile level.
-            The passage should be presented in a standardized test format and maintain appropriate complexity for {request.reading_level} Lexile level readers.
-
-            Genre-specific requirements:
-            {genre_guidance}
-
-            Technical requirements:
-            {technical_requirements}
-
-            {question_guidance if request.generateQuestions else ''}
-            {answer_key_guidance if request.generateQuestions and request.includeAnswerKey else ''}
-
-            Return the content in this exact format:
-
-            # **[Title]**
-
-            [Passage content with proper paragraphs]
-
-            {'''## Questions
-
-1. [Question text]
-   A. [Answer choice]
-   B. [Answer choice]
-   C. [Answer choice]
-   D. [Answer choice]
-
-2. [Question text]
-   A. [Answer choice]
-   B. [Answer choice]
-   C. [Answer choice]
-   D. [Answer choice]
-
-[etc...]''' if request.generateQuestions else ''}
-
-            {'''[[ANSWER_KEY_START]]
-**Answer Key**
-
-Question 1: [Letter]  
-Explanation: [Detailed explanation]
-
-Question 2: [Letter]  
-Explanation: [Detailed explanation]
-
-[etc...]''' if request.generateQuestions and request.includeAnswerKey else ''}"""
-
-            print("\n=== PROMPT SENT TO AI ===")
-            print(prompt)
-            print("========================\n")
-
-            # Generate the passage using OpenAI's API
-            client = OpenAI(api_key=openai_api_key)
-            response = client.chat.completions.create(
-                model="gpt-4",
-                messages=[
-                    {
-                        "role": "system",
-                        "content": "You are an expert in creating Lexile-appropriate assessment passages with aligned questions."
-                    },
-                    {
-                        "role": "user",
-                        "content": prompt
-                    }
-                ],
-                temperature=0.7,
-                stream=True
-            )
-
-            content_buffer = ""
-            for chunk in response:
-                if chunk.choices[0].delta.content is not None:
-                    text = chunk.choices[0].delta.content
-                    content_buffer += text
-                    yield f"data: {json.dumps({'type': 'content', 'content': text})}\n\n"
-
-                    # Check if we have a complete question section
-                    if '## Questions' in content_buffer and request.generateQuestions:
-                        questions_section = content_buffer.split('## Questions')[-1]
-                        if questions_section.count('\n1.') > 0:  # We have at least one complete question
-                            try:
-                                # Extract and format questions
-                                questions = []
-                                current_question = None
-                                for line in questions_section.split('\n'):
-                                    if line.strip().startswith(('[1-9]', '1.', '2.', '3.', '4.', '5.')):
-                                        if current_question:
-                                            questions.append(current_question)
-                                        current_question = {
-                                            'question': line.split('.', 1)[1].strip(),
-                                            'answers': [],
-                                            'correctAnswer': '',
-                                            'explanation': '',
-                                            'standardReference': ''
-                                        }
-                                    elif line.strip().startswith(('A.', 'B.', 'C.', 'D.')):
-                                        if current_question:
-                                            current_question['answers'].append(line.strip())
-                                    elif line.strip().startswith('Standard:') and current_question:
-                                        current_question['standardReference'] = line.replace('Standard:', '').strip()
-
-                                if current_question and current_question['answers']:
-                                    questions.append(current_question)
-
-                                if questions:
-                                    yield f"data: {json.dumps({'type': 'questions', 'questions': questions})}\n\n"
-                            except Exception as e:
-                                print(f"Error parsing questions: {str(e)}")
-
-            yield f"data: {json.dumps({'type': 'complete'})}\n\n"
-
-        except Exception as e:
-            print(f"Error generating assessment: {e}")
-            yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
-
-    return StreamingResponse(generate(), media_type='text/event-stream')
+        print(f"Error in generate_passage endpoint: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/chat")
 async def chat(request: ChatRequest):
@@ -1095,7 +523,7 @@ async def chat(request: ChatRequest):
         
         # Add the current message
         messages.append({"role": "user", "content": request.message})
-        
+
         async def generate():
             try:
                 client = OpenAI(api_key=openai_api_key)
@@ -1104,7 +532,7 @@ async def chat(request: ChatRequest):
                     messages=messages,
                     stream=True
                 )
-                
+
                 for chunk in response:
                     if chunk.choices[0].delta.content is not None:
                         yield chunk.choices[0].delta.content
@@ -1316,7 +744,7 @@ async def generate_exit_ticket(request: GenerateExitTicketRequest):
                 Practice Story Title: {practice_title}
                 Practice Story Content: {practice_story}
 
-                Format the response in markdown:
+        Format the response in markdown:
                 ### Exit Ticket: Demonstrating {request.skill}
 
                 **Learning Target:**
@@ -1330,7 +758,7 @@ async def generate_exit_ticket(request: GenerateExitTicketRequest):
                 2. [How to show understanding]
                 3. [Time management suggestion]
 
-                **Success Criteria:**
+        **Success Criteria:**
                 - [Specific expectations for mastery]
                 - [Required text evidence]
                 - [Quality indicators]
@@ -1505,8 +933,8 @@ async def parse_students(request: ParseStudentsRequest):
                     "role": "system", 
                     "content": "You are a helpful assistant that extracts student information from text and returns it in a structured JSON format. Do not include markdown formatting or code blocks in your response."
                 },
-                {"role": "user", "content": prompt}
-            ],
+                    {"role": "user", "content": prompt}
+                ],
             temperature=0.1,
         )
         
@@ -1582,7 +1010,7 @@ async def improve_observation(request: ImproveObservationRequest):
                     "content": prompt
                 }
             ],
-            temperature=0.7,
+                temperature=0.7,
             max_tokens=200
         )
         
@@ -1602,23 +1030,19 @@ async def improve_observation(request: ImproveObservationRequest):
 
 @app.post("/generate-parallel")
 async def generate_parallel(request: ParallelGenerateRequest):
-    """
-    Generate warm-up, introduction, and practice sections in parallel.
-    """
+    """Generate parallel content streams."""
+    return StreamingResponse(generate(), media_type='text/event-stream')
+
     async def generate():
         try:
-            # Create tasks for each section
-            warmup_task = asyncio.create_task(process_warmup(request.warmUp))
-            intro_task = asyncio.create_task(process_intro(request.introduction))
-            practice_task = asyncio.create_task(process_practice(request.practice))
-
-            # Process all tasks in parallel
-            tasks = [warmup_task, intro_task, practice_task]
+            tasks = [
+                asyncio.create_task(process_warmup(request.warmUp)),
+                asyncio.create_task(process_intro(request.introduction)),
+                asyncio.create_task(process_practice(request.practice))
+            ]
+            
             while tasks:
-                done, pending = await asyncio.wait(
-                    tasks,
-                    return_when=asyncio.FIRST_COMPLETED
-                )
+                done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
                 
                 for task in done:
                     try:
@@ -1632,8 +1056,6 @@ async def generate_parallel(request: ParallelGenerateRequest):
         except Exception as e:
             print(f"Error in parallel generation: {str(e)}")
             yield f"data: {json.dumps({'type': 'error', 'message': 'Failed to generate content'})}\n\n"
-
-    return StreamingResponse(generate(), media_type='text/event-stream')
 
 async def process_warmup(request: GenerateWarmupRequest):
     """Process warm-up content and stream chunks."""
@@ -1824,3 +1246,335 @@ async def process_practice(request: GeneratePracticeRequest):
     except Exception as e:
         print(f"Error generating practice: {str(e)}")
         yield f"data: {json.dumps({'source': 'practice', 'type': 'error', 'message': 'Failed to generate practice'})}\n\n"
+
+# Add new model for saving assessments
+class SaveAssessmentRequest(BaseModel):
+    teacherId: str
+    title: str
+    passage: str | None = None  # Make passage optional since we might have paired passages
+    genre: str
+    isAIGenerated: bool = True
+    includeAnswerKey: bool = False
+    answerKey: str | None = None
+    questions: list[dict] = []
+    isPairedPassage: bool = False
+    passages: list[dict] | None = None
+
+    @model_validator(mode='before')
+    def validate_passage_data(cls, values):
+        if values.get('isPairedPassage'):
+            if not values.get('passages') or len(values.get('passages', [])) != 2:
+                raise ValueError('Paired passage requires exactly two passages')
+            # For paired passages, concatenate both passages with a separator
+            values['passage'] = f"{values['passages'][0].get('content', '')}\n\n---\n\n{values['passages'][1].get('content', '')}"
+        else:
+            if not values.get('passage'):
+                raise ValueError('Single passage requires passage content')
+        return values
+
+@app.post("/save-assessment")
+async def save_assessment(request: SaveAssessmentRequest):
+    """
+    Save a generated assessment passage to the database.
+    """
+    try:
+        # Connect to MongoDB
+        client = MongoClient(os.environ.get('MONGODB_URI'))
+        db = client.teachassist
+
+        # Parse answer key if it exists
+        answer_key_data = {}
+        if request.answerKey:
+            # Split the answer key into individual question answers
+            answer_key_sections = request.answerKey.split('\n\n')
+            for section in answer_key_sections:
+                if section.startswith('Question'):
+                    # Extract question number
+                    q_num = int(section.split(':')[0].replace('Question', '').strip()) - 1
+                    lines = section.split('\n')
+                    
+                    # Extract answer letter, standard, and explanation
+                    answer_letter = lines[0].split(':')[1].strip()
+                    standard = ''
+                    explanation = ''
+                    
+                    for line in lines[1:]:
+                        if line.startswith('Standard:'):
+                            standard = line.replace('Standard:', '').strip()
+                        elif line.startswith('Explanation:'):
+                            explanation = line.replace('Explanation:', '').strip()
+                        elif not line.startswith(('Question', 'Standard:', 'Explanation:')) and explanation:
+                            explanation += ' ' + line.strip()
+                    
+                    answer_key_data[q_num] = {
+                        'correctAnswer': answer_letter,
+                        'explanation': explanation,
+                        'standardReference': standard
+                    }
+
+        # Prepare the assessment passage document
+        assessment_passage_doc = {
+            "teacherId": request.teacherId,
+            "title": request.title,
+            "passage": request.passage,
+            "genre": request.genre,
+            "isAIGenerated": request.isAIGenerated,
+            "includeAnswerKey": request.includeAnswerKey,
+            "answerKey": request.answerKey,
+            "isPairedPassage": request.isPairedPassage,
+            "passages": request.passages,
+            "questions": [
+                {
+                    "question": q["question"],
+                    "answers": q["answers"],
+                    "correctAnswer": answer_key_data.get(i, {}).get('correctAnswer', ''),
+                    "explanation": answer_key_data.get(i, {}).get('explanation', ''),
+                    "standardReference": answer_key_data.get(i, {}).get('standardReference', ''),
+                    "bloomsLevel": q.get("bloomsLevel", ""),
+                }
+                for i, q in enumerate(request.questions)
+            ],
+            "createdAt": datetime.utcnow(),
+            "updatedAt": datetime.utcnow()
+        }
+
+        # Insert into assessmentpassages collection
+        result = db.assessmentpassages.insert_one(assessment_passage_doc)
+        
+        return {
+            "id": str(result.inserted_id), 
+            "message": "Assessment passage saved successfully"
+        }
+
+    except Exception as e:
+        print(f"Error saving assessment passage: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/generate-assessment")
+async def generate_assessment(request: GenerateAssessmentRequest):
+    """
+    Generate an assessment passage with optional questions and answer key.
+    """
+    try:
+        async def generate():
+            try:
+                # Extract grade level from first standard
+                standard_match = re.match(r'(\d+|K)\.', request.standards[0].code)
+                if not standard_match:
+                    raise ValueError("Could not determine grade level from standards")
+                
+                grade = standard_match.group(1)
+                category = "elementary" if grade in ["K", "1", "2", "3"] else "middle" if grade in ["4", "5", "6"] else "advanced"
+                
+                # Build standards requirements
+                standards_requirements = "This passage must allow assessment of these standards:\n"
+                for standard in request.standards:
+                    standards_requirements += f"- {standard.code}: {standard.description}\n"
+                
+                # Set technical requirements based on grade level
+                if category == "elementary":
+                    technical_requirements = """
+                    - 3-4 paragraphs
+                    - Simple sentence structure
+                    - Grade-appropriate vocabulary
+                    - Clear topic sentences
+                    - Basic transitions
+                    - Concrete examples
+                    """
+                elif category == "middle":
+                    technical_requirements = """
+                    - 4-5 paragraphs
+                    - Mix of simple and complex sentences
+                    - Grade-appropriate academic vocabulary
+                    - Strong topic sentences
+                    - Varied transitions
+                    - Specific examples and details
+                    """
+                else:
+                    technical_requirements = """
+                    - 5-6 paragraphs
+                    - Complex sentence structure
+                    - Sophisticated vocabulary
+                    - Advanced transitions
+                    - Abstract concepts
+                    - Detailed evidence and examples
+                    """
+                
+                # Get genre guidance
+                genre_guidance = GENRE_GUIDANCE.get(request.genre, GENRE_GUIDANCE['Informational'])
+                
+                # Generate the passage using OpenAI's API
+                client = OpenAI(api_key=openai_api_key)
+                response = client.chat.completions.create(
+                    model="gpt-4o",
+                    messages=[
+                        {
+                            "role": "system",
+                            "content": "You are an expert in creating educational assessment passages."
+                        },
+                        {
+                            "role": "user",
+                            "content": f"""Create a passage that follows this exact format:
+
+# **[Title]**
+
+[Passage content with proper paragraphs]
+
+The passage should meet these requirements:
+{standards_requirements}
+
+Technical Requirements:
+{technical_requirements}
+
+Genre Requirements ({request.genre}):
+{genre_guidance}
+
+Topic: {request.topic}"""
+                        }
+                    ],
+                    temperature=0.7,
+                    stream=True
+                )
+
+                content_buffer = ""
+                for chunk in response:
+                    if chunk.choices[0].delta.content is not None:
+                        text = chunk.choices[0].delta.content
+                        content_buffer += text
+                        yield f"data: {json.dumps({'type': 'content', 'content': text})}\n\n"
+
+                # After generating the passage, generate questions
+                if request.generateQuestions:
+                    yield f"data: {json.dumps({'type': 'content', 'content': '\n\n## Questions\n\n'})}\n\n"
+                    
+                    question_prompt = f"""Create {4 if category == 'elementary' else 5} questions for this passage that assess these standards:
+{standards_requirements}
+
+Question Requirements:
+- Each question must directly assess one of the standards
+- Questions should follow STAAR format with specific question stems
+- Include a balanced mix of:
+    * Key Ideas and Details (main idea, inference, character analysis)
+    * Author's Purpose and Craft (text structure, point of view, author's choices)
+    * Integration of Knowledge and Ideas (using evidence, making connections)
+- Use academic vocabulary like "central idea," "text structure," "according to the passage"
+- Each question must have 4 answer choices (A-D)
+- Distractors should be plausible but clearly incorrect
+- Use grade-appropriate vocabulary and complexity
+
+Format each question EXACTLY like this:
+
+1. [Question text]
+   A. [Answer choice]
+   B. [Answer choice]
+   C. [Answer choice]
+   D. [Answer choice]
+
+Standard: [Standard being assessed]
+
+[Continue for remaining questions]
+
+Here's the passage:
+{content_buffer}"""
+
+                    # Generate questions
+                    question_messages = [
+                        {"role": "system", "content": "You are an expert in creating STAAR-aligned assessment questions. Follow the formatting exactly as specified."},
+                        {"role": "user", "content": question_prompt}
+                    ]
+
+                    question_response = client.chat.completions.create(
+                        model="gpt-4o",
+                        messages=question_messages,
+                        temperature=0.7,
+                        stream=True
+                    )
+
+                    questions = []
+                    current_question = None
+                    question_text = ""
+                    for chunk in question_response:
+                        if chunk.choices[0].delta.content is not None:
+                            text = chunk.choices[0].delta.content
+                            question_text += text
+                            yield f"data: {json.dumps({'type': 'content', 'content': text})}\n\n"
+
+                            # Parse questions as they come in
+                            lines = question_text.split('\n')
+                            for line in lines:
+                                line = line.strip()
+                                if line.startswith(('1.', '2.', '3.', '4.', '5.')):
+                                    if current_question and len(current_question['answers']) == 4:
+                                        questions.append(current_question)
+                                    current_question = {
+                                        'question': line.split('.', 1)[1].strip(),
+                                        'answers': [],
+                                        'correctAnswer': '',
+                                        'explanation': '',
+                                        'standardReference': ''
+                                    }
+                                elif line.startswith(('A.', 'B.', 'C.', 'D.')) and current_question:
+                                    current_question['answers'].append(line.strip())
+                                elif line.startswith('Standard:') and current_question:
+                                    current_question['standardReference'] = line.replace('Standard:', '').strip()
+                                    if len(current_question['answers']) == 4:
+                                        questions.append(current_question)
+                                        current_question = None
+                                        yield f"data: {json.dumps({'type': 'questions', 'questions': questions})}\n\n"
+
+                    # Add the last question if complete
+                    if current_question and len(current_question['answers']) == 4:
+                        questions.append(current_question)
+                        yield f"data: {json.dumps({'type': 'questions', 'questions': questions})}\n\n"
+
+                    # If answer key is requested, generate it
+                    if request.includeAnswerKey:
+                        yield f"data: {json.dumps({'type': 'content', 'content': '\n\n[[ANSWER_KEY_START]]\n**Answer Key**\n\n'})}\n\n"
+                        
+                        answer_key_prompt = """For each question, provide:
+1. The correct answer (A, B, C, or D)
+2. The specific standard being assessed
+3. A detailed explanation of why the answer is correct, citing evidence from the text
+
+Format EXACTLY like this:
+
+Question 1: [Letter]  
+Standard: [Standard code and description]
+Explanation: [Detailed explanation with text evidence]
+
+Question 2: [Letter]  
+Standard: [Standard code and description]
+Explanation: [Detailed explanation with text evidence]
+
+[etc...]"""
+
+                        answer_key_messages = [
+                            {"role": "system", "content": "You are an expert in creating detailed answer keys for assessment questions. Follow the formatting exactly as specified."},
+                            {"role": "assistant", "content": f"Here are the passage and questions that were generated:\n\nPassage:\n{content_buffer}\n\nQuestions:\n{question_text}"},
+                            {"role": "user", "content": answer_key_prompt}
+                        ]
+
+                        answer_key_response = client.chat.completions.create(
+                            model="gpt-4o",
+                            messages=answer_key_messages,
+                            temperature=0.7,
+                            stream=True
+                        )
+
+                        for chunk in answer_key_response:
+                            if chunk.choices[0].delta.content is not None:
+                                text = chunk.choices[0].delta.content
+                                yield f"data: {json.dumps({'type': 'content', 'content': text})}\n\n"
+
+                yield f"data: {json.dumps({'type': 'complete'})}\n\n"
+
+            except Exception as e:
+                print(f"Error generating assessment: {e}")
+                yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
+
+        return StreamingResponse(generate(), media_type='text/event-stream')
+
+    except Exception as e:
+        print(f"Error in generate_assessment endpoint: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+

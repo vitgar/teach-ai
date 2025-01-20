@@ -1,0 +1,76 @@
+# Instructions for modifications to the entire project
+
+## First rule
+- DO NOT MODIFY THE .cursorrules file YOU CAN DO IT ONLY WHEN CLEARLY SPECIFIED.
+
+## General Instructions
+- All modifications should be made only in the requested section. Do not modify other sections.
+- The project consists of 3 modules: ai_backend, db_backend, and client.
+- The ai_backend module is responsible for interacting with the OpenAI API.
+- The db_backend module is responsible for interacting with the database.
+- The client module is responsible for interacting with the user.
+
+## Folder and File Structure
+
+### AI Backend (Python/FastAPI)
+- main.py (Main FastAPI application)
+- config.py (Configuration settings)
+- app.py (Application logic)
+- lesson_plan_generator.py (Lesson plan generation logic)
+- intervention_note_improver.py (Note improvement logic)
+- requirements.txt (Python dependencies)
+- .env (Environment variables)
+- vercel.json (Vercel deployment config)
+
+### DB Backend (Node.js/Express)
+- server.js (Main Express application)
+- /api (API routes)
+- /models (MongoDB models)
+- /validators (Request validation)
+- /middleware (Express middleware)
+- /config (Configuration files)
+- package.json (Node.js dependencies)
+- .env (Environment variables)
+- vercel.json (Vercel deployment config)
+
+### Client (React/Vite)
+- /src (React source code)
+- /public (Static assets)
+- /build (Production build)
+- package.json (Node.js dependencies)
+- tsconfig.json (TypeScript config)
+- webpack.config.js (Webpack config)
+- .env.development (Development env vars)
+- .env.production (Production env vars)
+
+## Instructions for modifications to the  API Backends modifications
+ai_backend
+        -default model: gpt-4o-mini
+        -model for more complex tasks: gpt-4o
+        -forbidden models: gpt-4
+        -responsibility: "OpenAI API interactions only",
+        -allowed_operations: ["OpenAI API calls", "Request handling", "Response streaming"],
+        -forbidden_operations: ["Database operations", "File storage", "Authentication"]
+
+    "db_backend/*"
+        -"responsibility": "Database operations only",
+        -"allowed_operations": "MongoDB operations", "Data validation", "Authentication",
+        -"forbidden_operations": "OpenAI API calls", "AI model interactions"
+
+
+## Technology Stack
+Ai Backend
+    - Python
+    - FastAPI
+    - OpenAI API
+
+Db Backend
+    - Node.js
+    - Express
+    - MongoDB
+
+Client
+    - React
+    - Tailwind CSS
+    - Vite
+

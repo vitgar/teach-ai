@@ -34,6 +34,8 @@ const detailedStandardRoutes = require('./api/detailedstandard');
 const standardsRoutes = require('./api/standards');
 const passagesRoutes = require('./api/passages');
 const feedbackRoutes = require('./api/feedback');
+const assessmentRoutes = require('./api/assessments');
+const assessmentPassageRoutes = require('./api/assessmentPassages');
 
 const app = express();
 
@@ -136,7 +138,9 @@ const protectedRoutes = [
   { path: '/api/student-observations', router: studentObservationsRoutes },
   { path: '/api/passages', router: passagesRoutes },
   { path: "/api/detailedstandards", router: detailedStandardRoutes },
-  { path: '/api/feedback', router: feedbackRoutes }
+  { path: '/api/feedback', router: feedbackRoutes },
+  { path: '/api/assessments', router: assessmentRoutes },
+  { path: '/api/assessment-passages', router: assessmentPassageRoutes }
 ];
 
 // Apply authentication middleware to protected routes

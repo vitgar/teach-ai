@@ -1,4 +1,8 @@
 {
+  "scripts": {
+    "start-ai-backend": "powershell -Command \"cd ai_backend; .\\venv\\Scripts\\Activate.ps1; python -m uvicorn main:app --reload --port 5001\"",
+    "start-backend-win": "cd ai_backend && .\\venv\\Scripts\\Activate.ps1 && python -m uvicorn main:app --reload --port 5001"
+  },
   "dependencies": {
     "@emotion/react": "^11.13.3",
     "@emotion/styled": "^11.13.0",

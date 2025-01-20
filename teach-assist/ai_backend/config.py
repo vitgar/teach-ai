@@ -4,25 +4,25 @@ Configuration settings for the AI backend.
 
 # OpenAI model configurations
 OPENAI_MODELS = {
-    "default": "gpt-4",
-    "chat": "gpt-4",
-    "passage": "gpt-4",
-    "story": "gpt-4"
+    "default": "gpt-4o",
+    "chat": "gpt-4o",
+    "passage": "gpt-4o",
+    "story": "gpt-4o"
 }
 
 # Model mapping for different endpoints
 ENDPOINT_MODELS = {
-    "generate_passage": "gpt-4",
-    "generate_worksheet": "gpt-4",
-    "generate_warmup": "gpt-4",
-    "generate_story": "gpt-4",
-    "generate_guided_reading_intro": "gpt-4",
-    "generate_practice": "gpt-4",
-    "generate_exit_ticket": "gpt-4",
-    "generate_graphic_organizer": "gpt-4",
-    "improve_observation": "gpt-4",
-    "parse_students": "gpt-4",
-    "parse_students_from_image": "gpt-4"
+    "generate_passage": "gpt-4o",
+    "generate_worksheet": "gpt-4o",
+    "generate_warmup": "gpt-4o",
+    "generate_story": "gpt-4o",
+    "generate_guided_reading_intro": "gpt-4o",
+    "generate_practice": "gpt-4o",
+    "generate_exit_ticket": "gpt-4o",
+    "generate_graphic_organizer": "gpt-4o",
+    "improve_observation": "gpt-4o",
+    "parse_students": "gpt-4o",
+    "parse_students_from_image": "gpt-4o"
 }
 
 # API settings

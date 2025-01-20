@@ -55,17 +55,32 @@ interface Standard {
   teachingStandard?: string;
 }
 
+interface PassageData {
+  topic: string;
+  genre: string;
+}
+
+interface AssessmentRequestData {
+  isPairedPassage: boolean;
+  generateQuestions: boolean;
+  questionStyle: string;
+  includeAnswerKey: boolean;
+  passages?: PassageData[];
+  topic?: string;
+  genre?: string;
+  standards: Array<{
+    id: string;
+    code: string;
+    standard: string;
+    description: string;
+  } | null>;
+}
+
 const GENRES = [
   'Fiction', 'Realistic Fiction', 'Historical Fiction', 'Science Fiction',
   'Fantasy', 'Mystery', 'Adventure', 'Horror', 'Drama', 'Poetry',
   'Mythology', 'Fable', 'Folktale', 'Biography', 'Autobiography',
   'Informational', 'Expository', 'Persuasive'
-];
-
-const LEXILE_LEVELS = [
-  'BR', '0-200', '200-300', '300-400', '400-500',
-  '500-600', '600-700', '700-800', '800-900', '900-1000',
-  '1000-1100', '1100-1200'
 ];
 
 const GRADE_LEVELS = ['K', '1', '2', '3', '4', '5', '6', '7', '8'];
@@ -75,11 +90,13 @@ const Assessments: React.FC = () => {
   
   // Form states
   const [topic, setTopic] = useState('');
-  const [readingLevel, setReadingLevel] = useState('');
   const [genre, setGenre] = useState('');
-  const [generateQuestions, setGenerateQuestions] = useState(false);
   const [questionStyle, setQuestionStyle] = useState('Generic');
   const [showAnswerKey, setShowAnswerKey] = useState(true);
+  // Add new state for paired passage
+  const [isPairedPassage, setIsPairedPassage] = useState(false);
+  const [topicTwo, setTopicTwo] = useState('');
+  const [genreTwo, setGenreTwo] = useState('');
 
   // Content states
   const [isStreaming, setIsStreaming] = useState(false);
@@ -149,26 +166,6 @@ const Assessments: React.FC = () => {
     setSelectedStandards(typeof value === 'string' ? value.split(',') : value);
   };
 
-  // Set default reading level based on teacher's grade
-  useEffect(() => {
-    if (teacher?.gradeLevel) {
-      const grade = teacher.gradeLevel.replace(/[^0-8KK]/g, '');
-      let defaultLevel = 'BR';
-      if (grade !== 'K') {
-        const gradeNum = parseInt(grade);
-        if (gradeNum <= 1) defaultLevel = '200-300';
-        else if (gradeNum <= 2) defaultLevel = '300-400';
-        else if (gradeNum <= 3) defaultLevel = '400-500';
-        else if (gradeNum <= 4) defaultLevel = '500-600';
-        else if (gradeNum <= 5) defaultLevel = '600-700';
-        else if (gradeNum <= 6) defaultLevel = '700-800';
-        else if (gradeNum <= 7) defaultLevel = '800-900';
-        else defaultLevel = '900-1000';
-      }
-      setReadingLevel(defaultLevel);
-    }
-  }, [teacher?.gradeLevel]);
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsStreaming(true);
@@ -179,15 +176,29 @@ const Assessments: React.FC = () => {
     setSavedAssessmentId(null);
 
     try {
-      console.log('Reading Level:', readingLevel);
-
-      const requestData = {
-        topic,
-        reading_level: readingLevel,
-        genre: genre || 'Informational',
-        generateQuestions,
-        questionStyle: generateQuestions ? questionStyle : 'STAAR',
+      const requestData: AssessmentRequestData = {
+        isPairedPassage,
+        generateQuestions: true, // Always true now
+        questionStyle: questionStyle,
         includeAnswerKey: showAnswerKey,
+        ...(isPairedPassage ? {
+          topic: undefined,
+          genre: undefined,
+          passages: [
+            {
+              topic,
+              genre: genre || 'Informational',
+            },
+            {
+              topic: topicTwo,
+              genre: genreTwo || 'Informational',
+            }
+          ]
+        } : {
+          topic,
+          genre: genre || 'Informational',
+          passages: undefined
+        }),
         standards: selectedStandards.map(id => {
           const standard = standards.find(s => s._id === id);
           return standard ? {
@@ -198,6 +209,7 @@ const Assessments: React.FC = () => {
           } : null;
         }).filter(Boolean)
       };
+
       console.log('Request data:', requestData);
 
       const response = await fetch('http://localhost:5001/generate-assessment', {
@@ -238,16 +250,12 @@ const Assessments: React.FC = () => {
                 break;
               } else if (data.type === 'content') {
                 const content = data.content.replace(/[\[\]"]/g, '');
-                console.log('Content chunk:', content);
                 
-                if (content.includes('[[ANSWER_KEY_START]]')) {
-                  console.log('Found answer key marker');
-                  const [passageContent, answerKeyContent] = content.split('[[ANSWER_KEY_START]]');
+                if (content.includes('ANSWER_KEY_START')) {
+                  const [passageContent] = content.split('ANSWER_KEY_START');
                   setStreamedContent(prev => prev + passageContent);
                   setIsCollectingAnswerKey(true);
-                  if (answerKeyContent) {
-                    setAnswerKeyBuffer(prev => prev + answerKeyContent);
-                  }
+                  setAnswerKeyBuffer(prev => prev + content.substring(content.indexOf('ANSWER_KEY_START')));
                 } else if (isCollectingAnswerKey) {
                   setAnswerKeyBuffer(prev => prev + content);
                 } else {
@@ -257,67 +265,86 @@ const Assessments: React.FC = () => {
                 console.log('Received questions:', data.questions);
                 setQuestions(data.questions);
               } else if (data.type === 'complete') {
-                console.log('Stream complete. Questions:', questions.length);
-                let formattedAnswerKey = '';
-                
-                if (answerKeyBuffer) {
-                  formattedAnswerKey = answerKeyBuffer
-                    .trim()
-                    .replace(/Question (\d+):/g, '\n\nQuestion $1:')
-                    .replace(/Explanation:/g, '\n\nExplanation:');
-                  console.log('Setting formatted answer key:', formattedAnswerKey);
-                  setAnswerKey(formattedAnswerKey);
-                }
                 setIsStreaming(false);
                 setIsCollectingAnswerKey(false);
-                setAnswerKeyBuffer('');
-
-                // Save the assessment after everything is complete
-                if (teacher?._id) {
-                  try {
-                    const title = streamedContent.split('\n')[0].replace(/^# /, '').replace(/\*\*/g, '');
-                    const token = localStorage.getItem('token');
-                    if (!token) {
-                      throw new Error('No authentication token found');
+                
+                // Parse answer key to extract question details
+                if (answerKeyBuffer) {
+                  console.log('Answer Key Buffer:', answerKeyBuffer);
+                  console.log('Current questions before parsing:', questions);
+                  const answerKeyLines = answerKeyBuffer.split('\n');
+                  console.log('Answer Key Lines:', answerKeyLines);
+                  const updatedQuestions = [...questions];
+                  let currentQuestionIndex = -1;
+                  
+                  for (const line of answerKeyLines) {
+                    console.log('Processing line:', line);
+                    // Match "Question X: [A-D]"
+                    const questionMatch = line.match(/Question (\d+): ([A-D])/);
+                    if (questionMatch) {
+                      currentQuestionIndex = parseInt(questionMatch[1]) - 1;
+                      console.log('Found question', currentQuestionIndex + 1, 'with answer', questionMatch[2]);
+                      if (updatedQuestions[currentQuestionIndex]) {
+                        updatedQuestions[currentQuestionIndex].correctAnswer = questionMatch[2];
+                      }
+                    } 
+                    // Match "Standard: [text]"
+                    else if (line.startsWith('Standard:') && updatedQuestions[currentQuestionIndex]) {
+                      const standard = line.replace('Standard:', '').trim();
+                      console.log('Found standard:', standard);
+                      updatedQuestions[currentQuestionIndex].standardReference = standard;
                     }
-
-                    const response = await fetch('http://localhost:5000/api/assessments', {
-                      method: 'POST',
-                      headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${token}`,
-                      },
-                      body: JSON.stringify({
-                        teacherId: teacher._id,
-                        title,
-                        passage: streamedContent,
-                        genre,
-                        lexileLevel: readingLevel,
-                        isAIGenerated: true,
-                        includeAnswerKey: showAnswerKey,
-                        answerKey: formattedAnswerKey,
-                        questions: questions.map(q => ({
-                          question: q.question,
-                          answers: q.answers,
-                          correctAnswer: q.correctAnswer || q.answers[0],
-                          explanation: q.explanation || '',
-                          standardReference: q.standardReference || ''
-                        }))
-                      }),
+                    // Match "Explanation: [text]"
+                    else if (line.startsWith('Explanation:') && updatedQuestions[currentQuestionIndex]) {
+                      const explanation = line.replace('Explanation:', '').trim();
+                      console.log('Found explanation:', explanation);
+                      updatedQuestions[currentQuestionIndex].explanation = explanation;
+                    }
+                  }
+                  console.log('Updated questions after parsing:', updatedQuestions);
+                  setQuestions(updatedQuestions);
+                }
+                
+                // Auto-save the assessment
+                if (teacher?._id && streamedContent) {
+                  try {
+                    setIsSaving(true);
+                    
+                    const saveResponse = await apiAxiosInstance.post('/api/assessment-passages', {
+                      teacherId: teacher?._id,
+                      title: `Assessment: ${topic}`,
+                      passage: streamedContent,
+                      genre: genre || 'Informational',
+                      isAIGenerated: true,
+                      includeAnswerKey: showAnswerKey,
+                      answerKey: answerKeyBuffer,
+                      questions: questions.map(q => ({
+                        question: q.question,
+                        answers: q.answers,
+                        correctAnswer: q.correctAnswer || '',
+                        explanation: q.explanation || '',
+                        standardReference: q.standardReference || '',
+                        bloomsLevel: q.bloomsLevel || ''
+                      })),
+                      isPairedPassage,
+                      passages: isPairedPassage ? [
+                        { topic, genre: genre || 'Informational' },
+                        { topic: topicTwo, genre: genreTwo || 'Informational' }
+                      ] : undefined
                     });
 
-                    if (response.ok) {
-                      const savedAssessment = await response.json();
-                      setSavedAssessmentId(savedAssessment._id);
-                      console.log('Assessment saved successfully with ID:', savedAssessment._id);
+                    if (saveResponse.status === 200) {
+                      setSavedAssessmentId(saveResponse.data._id);
+                      setSuccessMessage('Assessment saved successfully!');
+                      setShowSuccessAlert(true);
                     } else {
-                      const errorData = await response.json();
-                      console.error('Failed to save assessment:', errorData);
-                      setError(errorData.error || 'Failed to save assessment');
+                      throw new Error('Failed to save assessment');
                     }
                   } catch (error) {
-                    console.error('Error auto-saving assessment:', error);
-                    setError('Failed to save assessment. Please try again.');
+                    console.error('Error saving assessment:', error);
+                    setError('Failed to save assessment automatically. Please try again.');
+                  } finally {
+                    setIsSaving(false);
                   }
                 }
               }
@@ -580,7 +607,7 @@ const Assessments: React.FC = () => {
   };
 
   return (
-    <Box sx={{ p: 3, maxWidth: 1200, mx: 'auto' }}>
+    <Box sx={{ p: 3 }}>
       <SuccessAlert
         open={showSuccessAlert}
         message={successMessage}
@@ -595,15 +622,8 @@ const Assessments: React.FC = () => {
       
       <Paper elevation={3} sx={{ p: 3, mb: 3 }}>
         <form onSubmit={handleSubmit}>
-          <Box sx={{ display: 'flex', gap: 2, mb: 3, flexWrap: 'wrap' }}>
-            <TextField
-              label="Topic"
-              value={topic}
-              onChange={(e) => setTopic(e.target.value)}
-              required
-              sx={{ flexGrow: 1 }}
-            />
-            
+          {/* Grade Level and Standards Row */}
+          <Box sx={{ display: 'flex', gap: 2, mb: 2, alignItems: 'center' }}>
             <FormControl sx={{ minWidth: 120 }}>
               <InputLabel>Grade Level</InputLabel>
               <Select
@@ -620,7 +640,7 @@ const Assessments: React.FC = () => {
               </Select>
             </FormControl>
 
-            <FormControl sx={{ minWidth: 300 }}>
+            <FormControl sx={{ flexGrow: 1 }}>
               <InputLabel>Standards</InputLabel>
               <Select
                 multiple
@@ -689,21 +709,18 @@ const Assessments: React.FC = () => {
                 ))}
               </Select>
             </FormControl>
-            
-            <FormControl sx={{ minWidth: 200 }}>
-              <InputLabel>Reading Level</InputLabel>
-              <Select
-                value={readingLevel}
-                onChange={(e: SelectChangeEvent) => setReadingLevel(e.target.value)}
-                label="Reading Level"
-                required
-              >
-                {LEXILE_LEVELS.map((level) => (
-                  <MenuItem key={level} value={level}>{level}</MenuItem>
-                ))}
-              </Select>
-            </FormControl>
+          </Box>
 
+          {/* Topic and Genre Row */}
+          <Box sx={{ display: 'flex', gap: 2, mb: 2 }}>
+            <TextField
+              label="Topic"
+              value={topic}
+              onChange={(e) => setTopic(e.target.value)}
+              required
+              sx={{ flexGrow: 1 }}
+            />
+            
             <FormControl sx={{ minWidth: 200 }}>
               <InputLabel>Genre</InputLabel>
               <Select
@@ -719,52 +736,41 @@ const Assessments: React.FC = () => {
             </FormControl>
           </Box>
 
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 3 }}>
+          {/* Question Style and Answer Key Row */}
+          <Box sx={{ display: 'flex', gap: 2, mb: 2, alignItems: 'center' }}>
+            <FormControl sx={{ minWidth: 200 }}>
+              <InputLabel>Question Style</InputLabel>
+              <Select
+                value={questionStyle}
+                onChange={(e: SelectChangeEvent) => setQuestionStyle(e.target.value)}
+                label="Question Style"
+              >
+                <MenuItem value="STAAR">STAAR</MenuItem>
+                <MenuItem value="Generic">Generic</MenuItem>
+              </Select>
+            </FormControl>
+
             <FormControlLabel
               control={
                 <Checkbox
-                  checked={generateQuestions}
-                  onChange={(e) => setGenerateQuestions(e.target.checked)}
+                  checked={showAnswerKey}
+                  onChange={(e) => setShowAnswerKey(e.target.checked)}
                 />
               }
-              label="Generate Questions"
+              label="Include Answer Key"
             />
-            
-            {generateQuestions && (
-              <FormControl sx={{ minWidth: 200 }}>
-                <InputLabel>Question Style</InputLabel>
-                <Select
-                  value={questionStyle}
-                  onChange={(e: SelectChangeEvent) => setQuestionStyle(e.target.value)}
-                  label="Question Style"
-                >
-                  <MenuItem value="Generic">Generic</MenuItem>
-                  <MenuItem value="STAAR">STAAR</MenuItem>
-                </Select>
-              </FormControl>
-            )}
           </Box>
 
-          <Box sx={{ display: 'flex', gap: 2, mb: 2 }}>
+          {/* Submit Button */}
+          <Box sx={{ mt: 2 }}>
             <Button
+              type="submit"
               variant="contained"
-              onClick={handleSubmit}
-              disabled={isStreaming}
+              disabled={isStreaming || isLoading}
               startIcon={isStreaming ? <CircularProgress size={20} /> : null}
             >
               Generate Assessment
             </Button>
-            {generateQuestions && (
-              <FormControlLabel
-                control={
-                  <Checkbox
-                    checked={showAnswerKey}
-                    onChange={(e) => setShowAnswerKey(e.target.checked)}
-                  />
-                }
-                label="Include Answer Key"
-              />
-            )}
           </Box>
         </form>
       </Paper>

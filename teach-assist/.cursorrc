@@ -1,0 +1,14 @@
+{
+  "assistant": {
+    "modifications": {
+      "scope": "minimal",
+      "rules": [
+        "Only modify code specifically requested in the user's message",
+        "Make each modification as concise as possible",
+        "When fixing errors, focus only on the specific error mentioned",
+        "Do not remove or modify existing code unless explicitly requested",
+        "Always explain what changes are being made and why"
+      ]
+    }
+  }
+} 

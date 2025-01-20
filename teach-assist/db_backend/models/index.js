@@ -3,3 +3,7 @@ require("./Group");
 require("./Teacher");
 require("./LessonPlan");
 require("./Standard");
+require('./Student');
+require('./Period');
+require('./GroupType');
+require('./Assessment');
