@@ -477,8 +477,7 @@ Explanation: [Detailed explanation]
                                         'question': line.split('.', 1)[1].strip(),
                                         'answers': [],
                                         'correctAnswer': '',
-                                        'explanation': '',
-                                        'standardReference': ''
+                                        'explanation': ''
                                     }
                                 elif line.startswith(('A.', 'B.', 'C.', 'D.')) and current_question:
                                     current_question['answers'].append(line.strip())
@@ -1447,30 +1446,30 @@ Topic: {request.topic}"""
                 if request.generateQuestions:
                     yield f"data: {json.dumps({'type': 'content', 'content': '\n\n## Questions\n\n'})}\n\n"
                     
-                    question_prompt = f"""Create {4 if category == 'elementary' else 5} questions for this passage that assess these standards:
+                    question_prompt = f"""Create {4 if category == 'elementary' else 5} questions that STRICTLY follow {request.questionStyle} format and DIRECTLY assess these standards:
+
 {standards_requirements}
 
-Question Requirements:
-- Each question must directly assess one of the standards
-- Questions should follow STAAR format with specific question stems
-- Include a balanced mix of:
-    * Key Ideas and Details (main idea, inference, character analysis)
-    * Author's Purpose and Craft (text structure, point of view, author's choices)
-    * Integration of Knowledge and Ideas (using evidence, making connections)
-- Use academic vocabulary like "central idea," "text structure," "according to the passage"
-- Each question must have 4 answer choices (A-D)
-- Distractors should be plausible but clearly incorrect
-- Use grade-appropriate vocabulary and complexity
+STAAR Question Requirements:
+- Each question MUST use one of these STAAR stems:
+    * "Based on paragraph [X]..."
+    * "What is the most likely reason..."
+    * "Read this sentence from paragraph [X]..."
+    * "Which sentence from the passage best supports..."
+    * "The author includes paragraph [X] to..."
+    * "What can the reader conclude from..."
+    * "Which detail from the passage supports..."
 
-Format each question EXACTLY like this:
+Standards Alignment:
+- Each question must EXPLICITLY assess one of the listed standards
+- Map questions to standards internally but DO NOT include them in the output
 
-1. [Question text]
+Question Format:
+1. [STAAR stem question text]
    A. [Answer choice]
    B. [Answer choice]
    C. [Answer choice]
    D. [Answer choice]
-
-Standard: [Standard being assessed]
 
 [Continue for remaining questions]
 
@@ -1479,7 +1478,10 @@ Here's the passage:
 
                     # Generate questions
                     question_messages = [
-                        {"role": "system", "content": "You are an expert in creating STAAR-aligned assessment questions. Follow the formatting exactly as specified."},
+                        {
+                            "role": "system", 
+                            "content": "You are an expert in creating STAAR-aligned assessment questions. You must use STAAR stems and ensure each question directly assesses a specific standard, but do not display the standards in the output."
+                        },
                         {"role": "user", "content": question_prompt}
                     ]
 
@@ -1499,28 +1501,27 @@ Here's the passage:
                             question_text += text
                             yield f"data: {json.dumps({'type': 'content', 'content': text})}\n\n"
 
-                            # Parse questions as they come in
-                            lines = question_text.split('\n')
-                            for line in lines:
-                                line = line.strip()
-                                if line.startswith(('1.', '2.', '3.', '4.', '5.')):
-                                    if current_question and len(current_question['answers']) == 4:
-                                        questions.append(current_question)
-                                    current_question = {
-                                        'question': line.split('.', 1)[1].strip(),
-                                        'answers': [],
-                                        'correctAnswer': '',
-                                        'explanation': '',
-                                        'standardReference': ''
-                                    }
-                                elif line.startswith(('A.', 'B.', 'C.', 'D.')) and current_question:
-                                    current_question['answers'].append(line.strip())
-                                elif line.startswith('Standard:') and current_question:
-                                    current_question['standardReference'] = line.replace('Standard:', '').strip()
-                                    if len(current_question['answers']) == 4:
-                                        questions.append(current_question)
-                                        current_question = None
-                                        yield f"data: {json.dumps({'type': 'questions', 'questions': questions})}\n\n"
+                    # Parse questions as they come in
+                    lines = question_text.split('\n')
+                    for line in lines:
+                        line = line.strip()
+                        if line.startswith(('1.', '2.', '3.', '4.', '5.')):
+                            if current_question and len(current_question['answers']) == 4:
+                                questions.append(current_question)
+                            current_question = {
+                                'question': line.split('.', 1)[1].strip(),
+                                'answers': [],
+                                'correctAnswer': '',
+                                'explanation': ''
+                            }
+                        elif line.startswith(('A.', 'B.', 'C.', 'D.')) and current_question:
+                            current_question['answers'].append(line.strip())
+                        elif line.startswith('Standard:') and current_question:
+                            current_question['standardReference'] = line.replace('Standard:', '').strip()
+                            if len(current_question['answers']) == 4:
+                                questions.append(current_question)
+                                current_question = None
+                                yield f"data: {json.dumps({'type': 'questions', 'questions': questions})}\n\n"
 
                     # Add the last question if complete
                     if current_question and len(current_question['answers']) == 4:
@@ -1529,7 +1530,10 @@ Here's the passage:
 
                     # If answer key is requested, generate it
                     if request.includeAnswerKey:
-                        yield f"data: {json.dumps({'type': 'content', 'content': '\n\n[[ANSWER_KEY_START]]\n**Answer Key**\n\n'})}\n\n"
+                        print("\n=== Adding Answer Key Marker ===")
+                        answer_key_marker = '\n\n[[ANSWER_KEY_START]]\n**Answer Key**\n\n'
+                        print(f"Marker being added: {answer_key_marker}")
+                        yield f"data: {json.dumps({'type': 'content', 'content': answer_key_marker})}\n\n"
                         
                         answer_key_prompt = """For each question, provide:
 1. The correct answer (A, B, C, or D)
@@ -1554,18 +1558,30 @@ Explanation: [Detailed explanation with text evidence]
                             {"role": "user", "content": answer_key_prompt}
                         ]
 
+                        print("\n=== Generating Answer Key Content ===")
                         answer_key_response = client.chat.completions.create(
-                            model="gpt-4o",
+                            model="gpt-4",
                             messages=answer_key_messages,
                             temperature=0.7,
                             stream=True
                         )
 
+                        answer_key_content = ""
                         for chunk in answer_key_response:
                             if chunk.choices[0].delta.content is not None:
                                 text = chunk.choices[0].delta.content
+                                answer_key_content += text
                                 yield f"data: {json.dumps({'type': 'content', 'content': text})}\n\n"
-
+                        
+                        print("\n=== Final Content Structure ===")
+                        print("Complete content includes:")
+                        print("1. Passage")
+                        print("2. Questions")
+                        print("3. Answer Key Marker")
+                        print("4. Answer Key Content")
+                        print("\nMarker location check:")
+                        print(f"Content contains marker: {'[[ANSWER_KEY_START]]' in content_buffer}")
+                        
                 yield f"data: {json.dumps({'type': 'complete'})}\n\n"
 
             except Exception as e:

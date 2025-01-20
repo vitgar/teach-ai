@@ -13,17 +13,16 @@ import {
   Checkbox,
   Alert,
   CircularProgress,
-  Grid,
+  Chip,
+  OutlinedInput,
   Typography,
-  ButtonGroup,
   Menu,
   MenuItem as MuiMenuItem,
-  OutlinedInput,
-  ListItemText,
-  Chip,
 } from '@mui/material';
 import { useTeacher } from '../../context/TeacherContext';
 import StreamingPassage from './StreamingPassage';
+import SuccessAlert from '../Common/SuccessAlert';
+import apiAxiosInstance from "../../utils/axiosInstance";
 import PrintIcon from '@mui/icons-material/Print';
 import DownloadIcon from '@mui/icons-material/Download';
 import html2pdf from 'html2pdf.js';
@@ -31,9 +30,9 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import PictureAsPdfIcon from '@mui/icons-material/PictureAsPdf';
 import DescriptionIcon from '@mui/icons-material/Description';
-import SaveIcon from '@mui/icons-material/Save';
-import SuccessAlert from '../Common/SuccessAlert';
-import apiAxiosInstance from "../../utils/axiosInstance";
+
+// **** IMPORTANT: for server-side rendering of Markdown ****
+import ReactDOMServer from 'react-dom/server';
 
 interface Question {
   question: string;
@@ -85,15 +84,170 @@ const GENRES = [
 
 const GRADE_LEVELS = ['K', '1', '2', '3', '4', '5', '6', '7', '8'];
 
+// --- Updated styles for Markdown ---
+const markdownStyles = `
+  .markdown-body {
+    font-family: Arial, sans-serif;
+    line-height: 1.6;
+    max-width: 800px;
+    margin: 0 auto;
+    padding: 20px;
+  }
+
+  .markdown-body h1, .markdown-body h2, .markdown-body h3 {
+    color: #333;
+    font-weight: bold;
+    margin: 1em 0 0.5em;
+  }
+
+  .markdown-body h1 {
+    text-align: center;
+    font-size: 1.5em;
+  }
+
+  /* Questions section */
+  .markdown-body h2:not(.answer-key-section h2) {
+    margin-top: 2em;
+    font-size: 1.3em;
+    border-bottom: 2px solid #333;
+    padding-bottom: 0.5em;
+  }
+
+  /* Numbered questions */
+  .markdown-body ol {
+    list-style-type: none;
+    counter-reset: question;
+    padding-left: 0;
+    margin-top: 1.5em;
+  }
+
+  .markdown-body ol > li {
+    counter-increment: question;
+    margin-bottom: 2em;
+    padding-left: 2em;
+    position: relative;
+  }
+
+  .markdown-body ol > li::before {
+    content: counter(question) ".";
+    position: absolute;
+    left: 0;
+    font-weight: bold;
+  }
+
+  /* Answer choices (A, B, C, D) */
+  .markdown-body ol > li > ol {
+    list-style-type: none;
+    margin: 1em 0 1em 0;
+    padding-left: 2em;
+  }
+
+  .markdown-body ol > li > ol > li {
+    margin: 0.5em 0;
+    position: relative;
+    padding-left: 1.5em;
+    display: block;
+  }
+
+  .markdown-body ol > li > ol > li::before {
+    content: attr(value) ".";
+    position: absolute;
+    left: 0;
+    font-weight: normal;
+  }
+
+  /* Answer key section */
+  .answer-key-section {
+    page-break-before: always;
+    margin-top: 2em;
+    border-top: 2px solid #333;
+    padding-top: 2em;
+  }
+
+  .answer-key-section h2 {
+    text-align: center;
+    margin-bottom: 1em;
+  }
+
+  /* Print-specific styles */
+  @media print {
+    .answer-key-section {
+      page-break-before: always !important;
+    }
+    .markdown-body {
+      padding: 0;
+    }
+  }
+`;
+
+const splitContent = (content: string) => {
+  console.log("\n=== Splitting Content ===");
+  console.log("Original content length:", content.length);
+  
+  const marker = '[[ANSWER_KEY_START]]';
+  console.log("Looking for marker:", marker);
+  
+  const parts = content.split(marker);
+  console.log("Number of parts after split:", parts.length);
+  
+  if (parts.length > 1) {
+    console.log("Main content length:", parts[0].length);
+    console.log("Answer key content length:", parts[1].length);
+    console.log("Split successful - found marker");
+    return {
+      mainContent: parts[0].trim(),
+      answerKeyContent: parts[1].trim()
+    };
+  }
+  
+  console.log("No marker found - returning full content");
+  return {
+    mainContent: content.trim(),
+    answerKeyContent: ""
+  };
+};
+
+// A helper to embed the main content + answer key together.
+const createPrintContent = (mainContentHTML: string, answerKeyHTML: string) => {
+  // Format questions to ensure they appear on separate lines
+  const formattedMainContent = mainContentHTML.replace(
+    /([A-D])\./g,
+    '<br>$1.'
+  );
+
+  return `
+    <div class="markdown-body">
+      ${formattedMainContent}
+    </div>
+
+    ${
+      answerKeyHTML
+        ? `
+        <div class="markdown-body answer-key-section" style="page-break-before: always;">
+          <h2>Answer Key</h2>
+          ${answerKeyHTML}
+        </div>
+      `
+        : ''
+    }
+  `;
+};
+
+// Utility to convert raw Markdown into rendered HTML using react-markdown + SSR
+function convertMarkdownToHtml(markdown: string) {
+  return ReactDOMServer.renderToStaticMarkup(
+    <ReactMarkdown remarkPlugins={[remarkGfm]}>{markdown}</ReactMarkdown>
+  );
+}
+
 const Assessments: React.FC = () => {
   const { teacher } = useTeacher();
-  
+
   // Form states
   const [topic, setTopic] = useState('');
   const [genre, setGenre] = useState('');
   const [questionStyle, setQuestionStyle] = useState('Generic');
   const [showAnswerKey, setShowAnswerKey] = useState(true);
-  // Add new state for paired passage
   const [isPairedPassage, setIsPairedPassage] = useState(false);
   const [topicTwo, setTopicTwo] = useState('');
   const [genreTwo, setGenreTwo] = useState('');
@@ -104,29 +258,29 @@ const Assessments: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [questions, setQuestions] = useState<Question[]>([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [answerKey, setAnswerKey] = useState<string>('');
   const [answerKeyBuffer, setAnswerKeyBuffer] = useState<string>('');
   const [isCollectingAnswerKey, setIsCollectingAnswerKey] = useState(false);
 
   const [isSaving, setIsSaving] = useState(false);
   const [showSuccessAlert, setShowSuccessAlert] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
-
-  // Add new state for saved assessment ID
   const [savedAssessmentId, setSavedAssessmentId] = useState<string | null>(null);
 
-  // Add new states for grade level and standards
+  // Grade level and standards
   const [gradeLevel, setGradeLevel] = useState('');
   const [standards, setStandards] = useState<Standard[]>([]);
   const [selectedStandards, setSelectedStandards] = useState<string[]>([]);
 
-  // Set default grade level based on teacher's grade and fetch standards
+  // For the download dropdown
+  const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
+  const open = Boolean(anchorEl);
+
+  // Fetch standards once teacher is known
   useEffect(() => {
     if (teacher?.gradeLevel) {
-      const grade = teacher.gradeLevel.replace(/[^0-8KK]/g, '');
+      const grade = teacher.gradeLevel.replace(/[^0-8K]/g, '');
       setGradeLevel(grade);
-      
-      // Fetch standards for the teacher's grade level
+
       const fetchStandards = async () => {
         try {
           const response = await apiAxiosInstance.get('/api/detailedstandards', {
@@ -138,17 +292,15 @@ const Assessments: React.FC = () => {
           setError('Failed to fetch standards');
         }
       };
-      
+
       fetchStandards();
     }
   }, [teacher?.gradeLevel]);
 
-  // Add handler for grade level change
   const handleGradeLevelChange = async (event: SelectChangeEvent) => {
     const newGradeLevel = event.target.value;
     setGradeLevel(newGradeLevel);
-    setSelectedStandards([]); // Reset selected standards when grade level changes
-    
+    setSelectedStandards([]);
     try {
       const response = await apiAxiosInstance.get('/api/detailedstandards', {
         params: { gradeLevel: newGradeLevel }
@@ -160,7 +312,6 @@ const Assessments: React.FC = () => {
     }
   };
 
-  // Add handler for standards change
   const handleStandardsChange = (event: SelectChangeEvent<string[]>) => {
     const value = event.target.value;
     setSelectedStandards(typeof value === 'string' ? value.split(',') : value);
@@ -174,49 +325,49 @@ const Assessments: React.FC = () => {
     setQuestions([]);
     setIsLoading(false);
     setSavedAssessmentId(null);
+    setAnswerKeyBuffer('');
+    setIsCollectingAnswerKey(false);
 
     try {
       const requestData: AssessmentRequestData = {
         isPairedPassage,
-        generateQuestions: true, // Always true now
-        questionStyle: questionStyle,
+        generateQuestions: true,
+        questionStyle,
         includeAnswerKey: showAnswerKey,
-        ...(isPairedPassage ? {
-          topic: undefined,
-          genre: undefined,
-          passages: [
-            {
+        ...(isPairedPassage
+          ? {
+              topic: undefined,
+              genre: undefined,
+              passages: [
+                { topic, genre: genre || 'Informational' },
+                { topic: topicTwo, genre: genreTwo || 'Informational' }
+              ]
+            }
+          : {
               topic,
               genre: genre || 'Informational',
-            },
-            {
-              topic: topicTwo,
-              genre: genreTwo || 'Informational',
-            }
-          ]
-        } : {
-          topic,
-          genre: genre || 'Informational',
-          passages: undefined
-        }),
-        standards: selectedStandards.map(id => {
-          const standard = standards.find(s => s._id === id);
-          return standard ? {
-            id: standard._id,
-            code: standard.code || standard.standard,
-            standard: standard.standard,
-            description: standard.description
-          } : null;
-        }).filter(Boolean)
+              passages: undefined
+            }),
+        standards: selectedStandards
+          .map((id) => {
+            const standard = standards.find((s) => s._id === id);
+            return standard
+              ? {
+                  id: standard._id,
+                  code: standard.code || standard.standard,
+                  standard: standard.standard,
+                  description: standard.description
+                }
+              : null;
+          })
+          .filter(Boolean)
       };
 
       console.log('Request data:', requestData);
 
       const response = await fetch('http://localhost:5001/generate-assessment', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(requestData)
       });
 
@@ -250,66 +401,62 @@ const Assessments: React.FC = () => {
                 break;
               } else if (data.type === 'content') {
                 const content = data.content.replace(/[\[\]"]/g, '');
-                
                 if (content.includes('ANSWER_KEY_START')) {
+                  // Start collecting answer key
                   const [passageContent] = content.split('ANSWER_KEY_START');
-                  setStreamedContent(prev => prev + passageContent);
+                  setStreamedContent((prev) => prev + passageContent);
                   setIsCollectingAnswerKey(true);
-                  setAnswerKeyBuffer(prev => prev + content.substring(content.indexOf('ANSWER_KEY_START')));
+                  setAnswerKeyBuffer((prev) => prev + content.substring(content.indexOf('ANSWER_KEY_START')));
                 } else if (isCollectingAnswerKey) {
-                  setAnswerKeyBuffer(prev => prev + content);
+                  setAnswerKeyBuffer((prev) => prev + content);
                 } else {
-                  setStreamedContent(prev => prev + content);
+                  setStreamedContent((prev) => prev + content);
                 }
               } else if (data.type === 'questions') {
-                console.log('Received questions:', data.questions);
                 setQuestions(data.questions);
               } else if (data.type === 'complete') {
                 setIsStreaming(false);
                 setIsCollectingAnswerKey(false);
-                
-                // Parse answer key to extract question details
+
+                // Parse the answer key text
                 if (answerKeyBuffer) {
                   console.log('Answer Key Buffer:', answerKeyBuffer);
-                  console.log('Current questions before parsing:', questions);
-                  const answerKeyLines = answerKeyBuffer.split('\n');
-                  console.log('Answer Key Lines:', answerKeyLines);
                   const updatedQuestions = [...questions];
+                  const answerKeyLines = answerKeyBuffer.split('\n');
                   let currentQuestionIndex = -1;
-                  
-                  for (const line of answerKeyLines) {
-                    console.log('Processing line:', line);
-                    // Match "Question X: [A-D]"
+
+                  answerKeyLines.forEach((line) => {
+                    // e.g. "Question 1: A"
                     const questionMatch = line.match(/Question (\d+): ([A-D])/);
                     if (questionMatch) {
                       currentQuestionIndex = parseInt(questionMatch[1]) - 1;
-                      console.log('Found question', currentQuestionIndex + 1, 'with answer', questionMatch[2]);
                       if (updatedQuestions[currentQuestionIndex]) {
                         updatedQuestions[currentQuestionIndex].correctAnswer = questionMatch[2];
                       }
-                    } 
-                    // Match "Standard: [text]"
-                    else if (line.startsWith('Standard:') && updatedQuestions[currentQuestionIndex]) {
-                      const standard = line.replace('Standard:', '').trim();
-                      console.log('Found standard:', standard);
-                      updatedQuestions[currentQuestionIndex].standardReference = standard;
+                    } else if (
+                      line.startsWith('Standard:') &&
+                      updatedQuestions[currentQuestionIndex]
+                    ) {
+                      updatedQuestions[currentQuestionIndex].standardReference = line
+                        .replace('Standard:', '')
+                        .trim();
+                    } else if (
+                      line.startsWith('Explanation:') &&
+                      updatedQuestions[currentQuestionIndex]
+                    ) {
+                      updatedQuestions[currentQuestionIndex].explanation = line
+                        .replace('Explanation:', '')
+                        .trim();
                     }
-                    // Match "Explanation: [text]"
-                    else if (line.startsWith('Explanation:') && updatedQuestions[currentQuestionIndex]) {
-                      const explanation = line.replace('Explanation:', '').trim();
-                      console.log('Found explanation:', explanation);
-                      updatedQuestions[currentQuestionIndex].explanation = explanation;
-                    }
-                  }
-                  console.log('Updated questions after parsing:', updatedQuestions);
+                  });
                   setQuestions(updatedQuestions);
                 }
-                
-                // Auto-save the assessment
+
+                // Auto-save
                 if (teacher?._id && streamedContent) {
                   try {
                     setIsSaving(true);
-                    
+
                     const saveResponse = await apiAxiosInstance.post('/api/assessment-passages', {
                       teacherId: teacher?._id,
                       title: `Assessment: ${topic}`,
@@ -318,7 +465,7 @@ const Assessments: React.FC = () => {
                       isAIGenerated: true,
                       includeAnswerKey: showAnswerKey,
                       answerKey: answerKeyBuffer,
-                      questions: questions.map(q => ({
+                      questions: questions.map((q) => ({
                         question: q.question,
                         answers: q.answers,
                         correctAnswer: q.correctAnswer || '',
@@ -327,10 +474,12 @@ const Assessments: React.FC = () => {
                         bloomsLevel: q.bloomsLevel || ''
                       })),
                       isPairedPassage,
-                      passages: isPairedPassage ? [
-                        { topic, genre: genre || 'Informational' },
-                        { topic: topicTwo, genre: genreTwo || 'Informational' }
-                      ] : undefined
+                      passages: isPairedPassage
+                        ? [
+                            { topic, genre: genre || 'Informational' },
+                            { topic: topicTwo, genre: genreTwo || 'Informational' }
+                          ]
+                        : undefined
                     });
 
                     if (saveResponse.status === 200) {
@@ -362,267 +511,130 @@ const Assessments: React.FC = () => {
     }
   };
 
-  const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
-
-  const handleDownloadClick = (event: React.MouseEvent<HTMLElement>) => {
-    setAnchorEl(event.currentTarget);
+  const handleCloseSuccess = () => {
+    setShowSuccessAlert(false);
   };
 
+  // -- Download menu handlers --
+  const handleDownloadClick = (event: React.MouseEvent<HTMLButtonElement>) => {
+    setAnchorEl(event.currentTarget);
+  };
   const handleDownloadClose = () => {
     setAnchorEl(null);
   };
 
+  // -- Print handler --
   const handlePrint = () => {
-    window.print();
+    // 1) Split out main vs. answer key from the raw text
+    const { mainContent, answerKeyContent } = splitContent(streamedContent);
+
+    // 2) Convert each piece to HTML
+    const mainHtml = convertMarkdownToHtml(mainContent);
+    const answerKeyHtml = convertMarkdownToHtml(answerKeyContent);
+
+    // 3) Combine them with custom styles
+    const formattedContent = createPrintContent(mainHtml, answerKeyHtml);
+
+    // 4) Open a new window and write our final HTML + CSS
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) return;
+
+    printWindow.document.write(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Assessment</title>
+          <style>
+            ${markdownStyles}
+            @media print {
+              .answer-key-section {
+                page-break-before: always !important;
+                margin-top: 50px;
+              }
+              @page {
+                margin: 0.5in;
+              }
+            }
+          </style>
+        </head>
+        <body>
+          ${formattedContent}
+          <script>
+            window.onload = function() {
+              window.print();
+            }
+          </script>
+        </body>
+      </html>
+    `);
+
+    printWindow.document.close();
+    printWindow.focus();
+    printWindow.print();
+    printWindow.close();
   };
 
+  // -- Download as PDF --
   const handleDownloadPDF = async () => {
-    handleDownloadClose();
-    const formattedContent = formatContent(streamedContent);
+    const { mainContent, answerKeyContent } = splitContent(streamedContent);
+    const mainHtml = convertMarkdownToHtml(mainContent);
+    const answerKeyHtml = convertMarkdownToHtml(answerKeyContent);
+    const formattedContent = createPrintContent(mainHtml, answerKeyHtml);
+
     const element = document.createElement('div');
-    element.innerHTML = `
-      <div class="markdown-body" style="max-width: 800px; margin: 0 auto; padding: 20px;">
-        <style>
-          /* Keep questions title with questions */
-          .questions-section {
-            page-break-inside: avoid !important;
-            break-inside: avoid !important;
-          }
-
-          .questions-title {
-            page-break-after: avoid !important;
-            break-after: avoid !important;
-          }
-
-          .questions {
-            page-break-before: avoid !important;
-            break-before: avoid !important;
-          }
-
-          /* Ensure answer key starts on new page */
-          .answer-key-section {
-            page-break-before: always !important;
-            break-before: always !important;
-            padding-top: 2em;
-          }
-
-          /* Question spacing */
-          .question {
-            margin-bottom: 2.5em;
-          }
-
-          .question-text {
-            margin-bottom: 1em;
-          }
-
-          .answer-choices {
-            margin-left: 2em;
-            margin-bottom: 1em;
-          }
-
-          .answer-choice {
-            margin-bottom: 0.5em;
-          }
-
-          /* Answer key spacing */
-          .answer-key-item {
-            margin-bottom: 0.8em;
-          }
-
-          .answer-key-explanation {
-            margin-top: 0.3em;
-            margin-bottom: 0.8em;
-            margin-left: 1em;
-          }
-
-          .answer-key-content {
-            margin-left: 2em;
-            line-height: 1.4;
-          }
-        </style>
-        ${formattedContent}
-      </div>
-    `;
+    element.innerHTML = formattedContent;
 
     const opt = {
-      margin: 1,
-      filename: `${topic}-assessment.pdf`,
+      margin: 0.7,
+      filename: 'assessment.pdf',
       image: { type: 'jpeg', quality: 0.98 },
       html2canvas: { scale: 2 },
-      jsPDF: { unit: 'in', format: 'letter', orientation: 'portrait' },
-      pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
+      jsPDF: { unit: 'in', format: 'letter', orientation: 'portrait' }
     };
 
     try {
       await html2pdf().set(opt).from(element).save();
+      handleDownloadClose();
     } catch (error) {
       console.error('Error generating PDF:', error);
       setError('Failed to generate PDF');
     }
   };
 
-  const handleDownloadWord = async () => {
+  // -- Download as Word --
+  const handleDownloadWord = () => {
+    const { mainContent, answerKeyContent } = splitContent(streamedContent);
+    const mainHtml = convertMarkdownToHtml(mainContent);
+    const answerKeyHtml = convertMarkdownToHtml(answerKeyContent);
+    const formattedContent = createPrintContent(mainHtml, answerKeyHtml);
+
+    const blob = new Blob([formattedContent], { type: 'application/msword' });
+    const url = URL.createObjectURL(blob);
+
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'assessment.doc';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+
     handleDownloadClose();
-    try {
-      // Split content into sections
-      const [mainContent, answerKeyContent] = streamedContent.split('ANSWER_KEY_START');
-      
-      // Debug the split
-      console.log('mainContent:', mainContent);
-      console.log('answerKeyContent:', answerKeyContent);
-
-      // Split into passage and questions sections
-      const sections = mainContent.split('## Questions');
-      
-      // Process passage section
-      const passageParts = sections[0].split('\n');
-      const title = passageParts[0].replace(/^# /, '').replace(/\*\*/g, '');
-      const passageContent = passageParts
-        .slice(1)
-        .join('\n')
-        .split('\n\n')
-        .map(paragraph => paragraph.trim())
-        .join('\n\n');
-
-      // Create RTF content with proper formatting
-      let rtfContent = `{\\rtf1\\ansi\\deff0
-{\\fonttbl{\\f0\\fnil\\fcharset0 Calibri;}}
-{\\colortbl;\\red0\\green0\\blue0;}
-
-\\paperw12240\\paperh15840\\margl1440\\margr1440\\margt1440\\margb1440
-
-\\pard\\qc\\b\\fs36 ${title}\\par
-\\pard\\sa360\\par
-
-\\pard\\sa360\\fs28\\b0 ${passageContent.replace(/\n\n/g, '\\par\\sa360 ')}\\par
-\\sa360
-
-\\pard\\qc\\b\\fs32 Questions\\par
-\\pard\\sa360\\par
-`;
-
-      // Process questions
-      const questionLines = sections[1]?.trim().split('\n') || [];
-      let currentQuestion = '';
-      for (const line of questionLines) {
-        if (line.match(/^\d+\./)) {
-          if (currentQuestion) {
-            rtfContent += currentQuestion + '\\par\\sa360 ';
-          }
-          currentQuestion = '\\b ' + line + '\\b0\\par ';
-        } else if (line.trim().match(/^[A-D]\./)) {
-          currentQuestion += '   ' + line + '\\par ';
-        }
-      }
-      if (currentQuestion) {
-        rtfContent += currentQuestion;
-      }
-
-      // Add answer key if present
-      if (answerKeyContent) {
-        rtfContent += `
-\\page
-\\pard\\qc\\b\\fs32 Answer Key\\par
-\\pard\\sa360\\par
-
-\\pard\\sa360\\fs28\\b0 ${answerKeyContent.replace(/\n\n/g, '\\par\\sa360 ')}\\par
-`;
-      }
-
-      rtfContent += '}';
-
-      // Create and download the file
-      const blob = new Blob([rtfContent], { type: 'application/rtf' });
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `${topic}-assessment.rtf`;
-      document.body.appendChild(a);
-      a.click();
-      window.URL.revokeObjectURL(url);
-      document.body.removeChild(a);
-    } catch (error) {
-      console.error('Error generating Word document:', error);
-      setError('Failed to generate Word document');
-    }
-  };
-
-  const formatContent = (content: string): string => {
-    const sections = content.split('## Questions');
-    const passageParts = sections[0].split('\n');
-    const title = passageParts[0].replace(/^# /, '').replace(/\*\*/g, '');
-    const passageContent = passageParts.slice(1).join('\n');
-
-    let formattedQuestions = '';
-    if (sections[1]) {
-      const questionLines = sections[1].trim().split('\n');
-      let currentQuestion = '';
-      let questionNumber = 1;
-
-      for (const line of questionLines) {
-        if (line.match(/^\d+\./)) {
-          if (currentQuestion) {
-            formattedQuestions += `</div>`;
-          }
-          currentQuestion = line;
-          formattedQuestions += `
-            <div class="question">
-              <div class="question-text">${questionNumber}. ${line.split('.')[1]}</div>
-              <div class="answer-choices">
-          `;
-          questionNumber++;
-        } else if (line.trim().match(/^[A-D]\./)) {
-          formattedQuestions += `<div class="answer-choice">${line}</div>`;
-        }
-      }
-      if (currentQuestion) {
-        formattedQuestions += `</div></div>`;
-      }
-    }
-
-    return `
-      <h2 class="passage-title">${title}</h2>
-      <div class="passage-content">
-        ${passageContent}
-      </div>
-      <div class="questions-section">
-        <h2 class="questions-title">Questions</h2>
-        <div class="questions">
-          ${formattedQuestions}
-        </div>
-      </div>
-      ${answerKey ? `
-        <div class="answer-key-section">
-          <h2 class="answer-key-title">Answer Key</h2>
-          <div class="answer-key-content">
-            ${answerKey}
-          </div>
-        </div>
-      ` : ''}
-    `;
-  };
-
-  const handleCloseSuccess = () => {
-    setShowSuccessAlert(false);
   };
 
   return (
     <Box sx={{ p: 3 }}>
-      <SuccessAlert
-        open={showSuccessAlert}
-        message={successMessage}
-        onClose={handleCloseSuccess}
-      />
-      
+      <SuccessAlert open={showSuccessAlert} message={successMessage} onClose={handleCloseSuccess} />
+
       {error && (
         <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)}>
           {error}
         </Alert>
       )}
-      
+
       <Paper elevation={3} sx={{ p: 3, mb: 3 }}>
         <form onSubmit={handleSubmit}>
-          {/* Grade Level and Standards Row */}
+          {/* Grade Level & Standards */}
           <Box sx={{ display: 'flex', gap: 2, mb: 2, alignItems: 'center' }}>
             <FormControl sx={{ minWidth: 120 }}>
               <InputLabel>Grade Level</InputLabel>
@@ -650,10 +662,10 @@ const Assessments: React.FC = () => {
                 renderValue={(selected) => (
                   <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
                     {selected.map((value) => {
-                      const standard = standards.find(s => s._id === value);
+                      const standard = standards.find((s) => s._id === value);
                       return standard ? (
-                        <Chip 
-                          key={value} 
+                        <Chip
+                          key={value}
                           label={`${standard.standard} - ${standard.description}`}
                           size="small"
                         />
@@ -662,14 +674,12 @@ const Assessments: React.FC = () => {
                   </Box>
                 )}
                 sx={{
-                  '& .MuiSelect-select': {
-                    minHeight: 40
-                  }
+                  '& .MuiSelect-select': { minHeight: 40 }
                 }}
               >
                 {standards.map((standard) => (
-                  <MenuItem 
-                    key={standard._id} 
+                  <MenuItem
+                    key={standard._id}
                     value={standard._id}
                     sx={{
                       display: 'flex',
@@ -681,25 +691,19 @@ const Assessments: React.FC = () => {
                     }}
                   >
                     <Box sx={{ display: 'flex', alignItems: 'center', width: '100%' }}>
-                      <Checkbox checked={selectedStandards.indexOf(standard._id) > -1} />
+                      <Checkbox
+                        checked={selectedStandards.indexOf(standard._id) > -1}
+                      />
                       <Box sx={{ ml: 1 }}>
-                        <Typography 
-                          variant="subtitle2" 
-                          sx={{ 
-                            fontWeight: 'bold',
-                            color: 'primary.main',
-                            mb: 0.5
-                          }}
+                        <Typography
+                          variant="subtitle2"
+                          sx={{ fontWeight: 'bold', color: 'primary.main', mb: 0.5 }}
                         >
                           {standard.standard}
                         </Typography>
-                        <Typography 
-                          variant="body2" 
-                          sx={{ 
-                            color: 'text.secondary',
-                            whiteSpace: 'normal',
-                            lineHeight: 1.3
-                          }}
+                        <Typography
+                          variant="body2"
+                          sx={{ color: 'text.secondary', whiteSpace: 'normal', lineHeight: 1.3 }}
                         >
                           {standard.description}
                         </Typography>
@@ -711,7 +715,7 @@ const Assessments: React.FC = () => {
             </FormControl>
           </Box>
 
-          {/* Topic and Genre Row */}
+          {/* Single/Paired Passage Inputs */}
           <Box sx={{ display: 'flex', gap: 2, mb: 2 }}>
             <TextField
               label="Topic"
@@ -720,7 +724,7 @@ const Assessments: React.FC = () => {
               required
               sx={{ flexGrow: 1 }}
             />
-            
+
             <FormControl sx={{ minWidth: 200 }}>
               <InputLabel>Genre</InputLabel>
               <Select
@@ -730,13 +734,15 @@ const Assessments: React.FC = () => {
                 required
               >
                 {GENRES.map((g) => (
-                  <MenuItem key={g} value={g}>{g}</MenuItem>
+                  <MenuItem key={g} value={g}>
+                    {g}
+                  </MenuItem>
                 ))}
               </Select>
             </FormControl>
           </Box>
 
-          {/* Question Style and Answer Key Row */}
+          {/* Question Style & Answer Key */}
           <Box sx={{ display: 'flex', gap: 2, mb: 2, alignItems: 'center' }}>
             <FormControl sx={{ minWidth: 200 }}>
               <InputLabel>Question Style</InputLabel>
@@ -761,7 +767,7 @@ const Assessments: React.FC = () => {
             />
           </Box>
 
-          {/* Submit Button */}
+          {/* Generate Button */}
           <Box sx={{ mt: 2 }}>
             <Button
               type="submit"
@@ -775,109 +781,50 @@ const Assessments: React.FC = () => {
         </form>
       </Paper>
 
-      {streamedContent && questions.length > 0 && (
-        <Grid container spacing={2}>
-          <Grid item xs={12}>
-            <StreamingPassage
-              passage={streamedContent}
-              questions={questions}
-              isLoading={isLoading}
-            />
-            <Box sx={{ mt: 2, display: 'flex', justifyContent: 'flex-end', gap: 3 }}>
-              <Button
-                variant="contained"
-                startIcon={<PrintIcon />}
-                onClick={handlePrint}
-                disabled={!streamedContent}
-              >
-                Print
-              </Button>
-              
-              <Button
-                variant="contained"
-                startIcon={<DownloadIcon />}
-                onClick={handleDownloadClick}
-                disabled={!streamedContent}
-                aria-controls="download-menu"
-                aria-haspopup="true"
-              >
-                Download
-              </Button>
-            </Box>
-          </Grid>
-          {showAnswerKey && answerKey && (
-            <Grid item xs={12}>
-              <Paper elevation={3} sx={{ p: 2, mt: 2 }}>
-                <Typography variant="h6" gutterBottom>
-                  Answer Key
-                </Typography>
-                <div style={{ whiteSpace: 'pre-line' }}>
-                  {answerKey}
-                </div>
-              </Paper>
-            </Grid>
-          )}
-        </Grid>
-      )}
-
-      {(isStreaming || streamedContent) && !questions.length && (
+      {/* Render the streamed content + questions */}
+      {streamedContent && (
         <>
           <StreamingPassage
             passage={streamedContent}
-            questions={[]}
-            isLoading={isStreaming}
+            questions={questions}
+            isLoading={isLoading}
           />
-          {!isStreaming && (
-            <Box sx={{ mt: 2, display: 'flex', justifyContent: 'flex-end', gap: 3 }}>
-              <Button
-                variant="contained"
-                startIcon={<PrintIcon />}
-                onClick={handlePrint}
-                disabled={!streamedContent}
-              >
-                Print
-              </Button>
-              
-              <Button
-                variant="contained"
-                startIcon={<DownloadIcon />}
-                onClick={handleDownloadClick}
-                disabled={!streamedContent}
-                aria-controls="download-menu"
-                aria-haspopup="true"
-              >
-                Download
-              </Button>
-            </Box>
-          )}
+
+          <Box sx={{ mt: 2, display: 'flex', gap: 2, justifyContent: 'flex-end' }}>
+            <Button
+              variant="contained"
+              color="primary"
+              onClick={handlePrint}
+              startIcon={<PrintIcon />}
+            >
+              Print
+            </Button>
+
+            <Button
+              variant="contained"
+              color="primary"
+              onClick={handleDownloadClick}
+              startIcon={<DownloadIcon />}
+            >
+              Download
+            </Button>
+
+            <Menu anchorEl={anchorEl} open={open} onClose={handleDownloadClose}>
+              <MuiMenuItem onClick={handleDownloadPDF}>
+                <PictureAsPdfIcon sx={{ mr: 1 }} />
+                Download as PDF
+              </MuiMenuItem>
+
+              <MuiMenuItem onClick={handleDownloadWord}>
+                <DescriptionIcon sx={{ mr: 1 }} />
+                Download as Word
+              </MuiMenuItem>
+            </Menu>
+          </Box>
         </>
       )}
-
-      <Menu
-        id="download-menu"
-        anchorEl={anchorEl}
-        open={Boolean(anchorEl)}
-        onClose={handleDownloadClose}
-        anchorOrigin={{
-          vertical: 'bottom',
-          horizontal: 'right',
-        }}
-        transformOrigin={{
-          vertical: 'top',
-          horizontal: 'right',
-        }}
-      >
-        <MuiMenuItem onClick={handleDownloadPDF}>
-          <PictureAsPdfIcon sx={{ mr: 1 }} />
-          PDF
-        </MuiMenuItem>
-        <MuiMenuItem onClick={handleDownloadWord}>
-          <DescriptionIcon sx={{ mr: 1 }} />
-          Word
-        </MuiMenuItem>
-      </Menu>
     </Box>
   );
 };
 
-export default Assessments; 
+export default Assessments;
